@@ -53,8 +53,10 @@ import { HealthModule } from './modules/health/health.module';
         url: config.get<string>('database.url'),
         ssl: { rejectUnauthorized: false },
         autoLoadEntities: true,
-        synchronize: config.get('app.nodeEnv') === 'development',
+        synchronize: false, // ← always false now, migrations handle schema changes
         logging: config.get('app.nodeEnv') === 'development',
+        migrations: [__dirname + '/database/migrations/*.{ts,js}'],
+        migrationsRun: false, // ← we run migrations manually, not on startup
         extra: { max: 10, idleTimeoutMillis: 30000 },
       }),
     }),
