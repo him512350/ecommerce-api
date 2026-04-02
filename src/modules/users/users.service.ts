@@ -11,6 +11,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
+import { MailService } from '../mail/mail.service';
 
 export interface FirebaseUserPayload {
   firebaseUid: string;
@@ -28,6 +29,7 @@ export class UsersService {
     @InjectRepository(Address)
     private readonly addressRepo: Repository<Address>,
     private readonly dataSource: DataSource,
+    private readonly mailService: MailService, // ← add
   ) {}
 
   // ── Firebase auto-provisioning ────────────────────────────────
@@ -61,8 +63,14 @@ export class UsersService {
       firstName: payload.firstName || payload.email.split('@')[0],
       lastName: payload.lastName,
       pictureUrl: payload.picture,
-      isVerified: true, // Firebase already verified the email
+      isVerified: true,
     });
+    const saved = await this.usersRepo.save(newUser);
+
+// Send welcome email (fire and forget — never block login)
+    this.mailService.sendWelcome(saved);
+
+    return saved;
 
     return this.usersRepo.save(newUser);
   }

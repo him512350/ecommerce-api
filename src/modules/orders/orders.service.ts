@@ -14,6 +14,9 @@ import { CouponsService } from '../coupons/coupons.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
 import { OrderStatus, PaymentStatus } from '../../common/enums';
+import { MailService } from '../mail/mail.service';
+import { UsersService } from '../users/users.service';
+
 
 @Injectable()
 export class OrdersService {
@@ -25,6 +28,8 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly couponsService: CouponsService,
     private readonly dataSource: DataSource,
+    private readonly mailService: MailService, // ← add
+    private readonly usersService: UsersService, // ← add
   ) {}
 
   async create(userId: string, dto: CreateOrderDto): Promise<Order> {
@@ -106,13 +111,20 @@ export class OrdersService {
       // Clear cart
       await this.cartService.clearCart(userId);
 
-      const savedOrderFull = await manager.findOne(Order, {
+      // Fetch full order for email
+      const fullOrder = await manager.findOne(Order, {
         where: { id: savedOrder.id },
         relations: ['items', 'shippingAddress', 'coupon'],
       });
-      if (!savedOrderFull)
-        throw new Error('Failed to retrieve order after creation');
-      return savedOrderFull;
+
+      // Guard null before passing to mail (TypeScript safety)
+      if (fullOrder) {
+        const user = await this.usersService.findOne(userId);
+        this.mailService.sendOrderConfirmation(fullOrder, user);
+      }
+
+      if (!fullOrder) throw new Error('Failed to retrieve created order');
+      return fullOrder;
     });
   }
 
