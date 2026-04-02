@@ -29,7 +29,7 @@ export class PaymentsService {
   ) {
     const stripeKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (stripeKey) {
-      this.stripe = new Stripe(stripeKey, { apiVersion: '2026-03-25.dahlia' });
+      this.stripe = new Stripe(stripeKey);
     }
   }
 
@@ -40,14 +40,13 @@ export class PaymentsService {
     }
 
     const paymentIntent = await this.stripe.paymentIntents.create({
-      amount: Math.round(Number(order.total) * 100), // Stripe uses cents
+      amount: Math.round(Number(order.total) * 100),
       currency: 'sgd',
       metadata: { orderId: order.id, userId },
     });
 
-    // Update order with payment intent ID
-    order.paymentIntentId = paymentIntent.id;
-    await this.ordersService['ordersRepo'].save(order);
+    // Store PaymentIntent ID on the order
+    await this.ordersService.updatePaymentIntentId(order.id, paymentIntent.id);
 
     return {
       clientSecret: paymentIntent.client_secret,
@@ -56,8 +55,17 @@ export class PaymentsService {
   }
 
   async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<void> {
-    const webhookSecret =
-      this.configService.get<string>('STRIPE_WEBHOOK_SECRET') ?? '';
+    const webhookSecret = this.configService.get<string>(
+      'STRIPE_WEBHOOK_SECRET',
+    );
+
+    if (!webhookSecret) {
+      this.logger.warn(
+        'STRIPE_WEBHOOK_SECRET not configured — skipping signature check',
+      );
+      return;
+    }
+
     let event: Stripe.Event;
 
     try {
@@ -73,25 +81,57 @@ export class PaymentsService {
       throw new BadRequestException('Invalid webhook signature');
     }
 
+    this.logger.log(`Stripe event received: ${event.type} [${event.id}]`);
+
     switch (event.type) {
-      case 'payment_intent.succeeded': {
-        const intent = event.data.object as Stripe.PaymentIntent;
-        await this.handlePaymentSucceeded(intent);
+      case 'payment_intent.succeeded':
+        await this.handlePaymentSucceeded(
+          event.data.object as Stripe.PaymentIntent,
+        );
         break;
-      }
-      case 'payment_intent.payment_failed': {
-        const intent = event.data.object as Stripe.PaymentIntent;
-        await this.handlePaymentFailed(intent);
+      case 'payment_intent.payment_failed':
+        await this.handlePaymentFailed(
+          event.data.object as Stripe.PaymentIntent,
+        );
         break;
-      }
       default:
-        this.logger.log(`Unhandled Stripe event: ${event.type}`);
+        this.logger.log(`Unhandled Stripe event type: ${event.type} — ignored`);
     }
   }
 
-  private async handlePaymentSucceeded(intent: Stripe.PaymentIntent) {
-    const { orderId } = intent.metadata;
-    const order = await this.ordersService.findOne(orderId);
+  private async handlePaymentSucceeded(
+    intent: Stripe.PaymentIntent,
+  ): Promise<void> {
+    const orderId = intent.metadata?.orderId;
+
+    // Guard: test triggers from Stripe CLI won't have a real orderId
+    if (!orderId) {
+      this.logger.warn(
+        `payment_intent.succeeded received with no orderId in metadata — likely a test trigger. Skipping.`,
+      );
+      return;
+    }
+
+    let order;
+    try {
+      order = await this.ordersService.findOne(orderId);
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        this.logger.warn(
+          `payment_intent.succeeded: order ${orderId} not found — skipping`,
+        );
+        return;
+      }
+      throw err;
+    }
+
+    // Idempotency: skip if already paid
+    if (order.paymentStatus === PaymentStatus.PAID) {
+      this.logger.log(
+        `Order ${orderId} already marked as paid — skipping duplicate event`,
+      );
+      return;
+    }
 
     const payment = this.paymentsRepo.create({
       orderId,
@@ -100,19 +140,41 @@ export class PaymentsService {
       status: PaymentStatusEnum.SUCCEEDED,
       provider: PaymentProviderEnum.STRIPE,
       transactionId: intent.id,
-      paymentMethod: 'card',
-      metadata: { intentId: intent.id },
+      paymentMethod: intent.payment_method_types?.[0] ?? 'card',
+      metadata: { intentId: intent.id, customerId: intent.customer },
     });
     await this.paymentsRepo.save(payment);
 
-    order.paymentStatus = PaymentStatus.PAID;
-    await this.ordersService['ordersRepo'].save(order);
+    await this.ordersService.updatePaymentStatus(orderId, PaymentStatus.PAID);
+    this.logger.log(`Order ${orderId} marked as PAID`);
   }
 
-  private async handlePaymentFailed(intent: Stripe.PaymentIntent) {
-    const { orderId } = intent.metadata;
-    const order = await this.ordersService.findOne(orderId);
-    order.paymentStatus = PaymentStatus.FAILED;
-    await this.ordersService['ordersRepo'].save(order);
+  private async handlePaymentFailed(
+    intent: Stripe.PaymentIntent,
+  ): Promise<void> {
+    const orderId = intent.metadata?.orderId;
+
+    if (!orderId) {
+      this.logger.warn(
+        'payment_intent.payment_failed: no orderId in metadata — skipping',
+      );
+      return;
+    }
+
+    try {
+      await this.ordersService.updatePaymentStatus(
+        orderId,
+        PaymentStatus.FAILED,
+      );
+      this.logger.log(`Order ${orderId} marked as FAILED`);
+    } catch (err) {
+      if (err instanceof NotFoundException) {
+        this.logger.warn(
+          `payment_intent.payment_failed: order ${orderId} not found — skipping`,
+        );
+        return;
+      }
+      throw err;
+    }
   }
 }

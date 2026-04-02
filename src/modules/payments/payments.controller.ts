@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Headers,
+  HttpCode,
+  HttpStatus,
   Post,
   Req,
   UseGuards,
@@ -32,6 +34,7 @@ export class PaymentsController {
   }
 
   @Post('webhook/stripe')
+  @HttpCode(HttpStatus.OK) // Stripe expects 200, not 201
   @ApiOperation({ summary: 'Stripe webhook — verified by signature, no JWT' })
   stripeWebhook(
     @Req() req: RawBodyRequest<Request>,

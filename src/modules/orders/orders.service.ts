@@ -13,7 +13,7 @@ import { CartService } from '../cart/cart.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
-import { OrderStatus } from '../../common/enums';
+import { OrderStatus, PaymentStatus } from '../../common/enums';
 
 @Injectable()
 export class OrdersService {
@@ -110,7 +110,8 @@ export class OrdersService {
         where: { id: savedOrder.id },
         relations: ['items', 'shippingAddress', 'coupon'],
       });
-      if (!savedOrderFull) throw new Error('Failed to retrieve order after creation');
+      if (!savedOrderFull)
+        throw new Error('Failed to retrieve order after creation');
       return savedOrderFull;
     });
   }
@@ -163,5 +164,18 @@ export class OrdersService {
     const order = await this.findOne(id);
     order.status = dto.status;
     return this.ordersRepo.save(order);
+  }
+  async updatePaymentStatus(
+    orderId: string,
+    status: PaymentStatus,
+  ): Promise<void> {
+    await this.ordersRepo.update(orderId, { paymentStatus: status });
+  }
+
+  async updatePaymentIntentId(
+    orderId: string,
+    paymentIntentId: string,
+  ): Promise<void> {
+    await this.ordersRepo.update(orderId, { paymentIntentId });
   }
 }

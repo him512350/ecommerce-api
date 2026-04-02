@@ -1,5 +1,3 @@
-import { Injectable } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-
-@Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') { }
+// Backward-compatible alias.
+// All controllers that import JwtAuthGuard continue to work with zero changes.
+export { FirebaseAuthGuard as JwtAuthGuard } from './firebase-auth.guard';

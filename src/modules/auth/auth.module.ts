@@ -1,25 +1,15 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
-import { ConfigModule } from '@nestjs/config';
+import { Global, Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { RefreshToken } from './entities/refresh-token.entity';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
+import { FirebaseAdminProvider } from './providers/firebase-admin.provider';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { UsersModule } from '../users/users.module';
-import { User } from '../users/entities/user.entity';
 
+@Global()
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([RefreshToken, User]),
-    PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({}), // secrets injected dynamically in strategies
-    ConfigModule,
-    UsersModule,
-  ],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy],
+  imports: [UsersModule],
+  providers: [FirebaseAdminProvider, FirebaseAuthGuard, AuthService],
   controllers: [AuthController],
+  exports: [FirebaseAdminProvider, FirebaseAuthGuard, UsersModule], // ← add UsersModule here
 })
-export class AuthModule { }
+export class AuthModule {}

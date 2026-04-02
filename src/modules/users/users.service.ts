@@ -4,17 +4,21 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import { DataSource, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { Address } from './entities/address.entity';
-import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
 
-const SALT_ROUNDS = 12;
+export interface FirebaseUserPayload {
+  firebaseUid: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  picture?: string;
+}
 
 @Injectable()
 export class UsersService {
@@ -26,27 +30,54 @@ export class UsersService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(dto: CreateUserDto): Promise<User> {
-    const exists = await this.usersRepo.findOne({
-      where: { email: dto.email },
-    });
-    if (exists) throw new ConflictException('Email already in use');
+  // ── Firebase auto-provisioning ────────────────────────────────
+  // Called on every authenticated request by FirebaseAuthGuard.
+  // Creates the user in our DB the first time they log in via Firebase.
 
-    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    const user = this.usersRepo.create({ ...dto, passwordHash });
-    return this.usersRepo.save(user);
+  async findOrCreateFromFirebase(payload: FirebaseUserPayload): Promise<User> {
+    // 1. Try to find by Firebase UID (fastest path for returning users)
+    let user = await this.usersRepo.findOne({
+      where: { firebaseUid: payload.firebaseUid },
+    });
+    if (user) return user;
+
+    // 2. Try to find by email (migration: user existed before Firebase was added)
+    user = await this.usersRepo.findOne({
+      where: { email: payload.email },
+    });
+    if (user) {
+      // Link Firebase UID to existing account
+      user.firebaseUid = payload.firebaseUid;
+      if (payload.picture && !user.pictureUrl) {
+        user.pictureUrl = payload.picture;
+      }
+      return this.usersRepo.save(user);
+    }
+
+    // 3. First-ever login — create new user
+    const newUser = this.usersRepo.create({
+      firebaseUid: payload.firebaseUid,
+      email: payload.email,
+      firstName: payload.firstName || payload.email.split('@')[0],
+      lastName: payload.lastName,
+      pictureUrl: payload.picture,
+      isVerified: true, // Firebase already verified the email
+    });
+
+    return this.usersRepo.save(newUser);
   }
+
+  // ── Standard CRUD ─────────────────────────────────────────────
 
   async findAll(pagination: PaginationDto) {
     const qb = this.usersRepo
       .createQueryBuilder('user')
-      .withDeleted()
       .orderBy('user.createdAt', 'DESC');
 
     if (pagination.search) {
       qb.where(
-        'user.email ILIKE :search OR user.firstName ILIKE :search OR user.lastName ILIKE :search',
-        { search: `%${pagination.search}%` },
+        'user.email ILIKE :s OR user.firstName ILIKE :s OR user.lastName ILIKE :s',
+        { s: `%${pagination.search}%` },
       );
     }
 
@@ -74,17 +105,16 @@ export class UsersService {
 
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
-    await this.usersRepo.softRemove(user); // soft delete — sets deleted_at
+    await this.usersRepo.softRemove(user);
   }
 
-  // ── Addresses ───────────────────────────────────────────────────
+  // ── Addresses ─────────────────────────────────────────────────
 
   async addAddress(userId: string, dto: CreateAddressDto): Promise<Address> {
-    await this.findOne(userId); // ensure user exists
+    await this.findOne(userId);
 
     return this.dataSource.transaction(async (manager) => {
       if (dto.isDefault) {
-        // Unset any existing default
         await manager.update(Address, { userId }, { isDefault: false });
       }
       const address = manager.create(Address, { ...dto, userId });
@@ -106,9 +136,5 @@ export class UsersService {
     });
     if (!address) throw new NotFoundException('Address not found');
     await this.addressRepo.remove(address);
-  }
-
-  async validatePassword(user: User, password: string): Promise<boolean> {
-    return bcrypt.compare(password, user.passwordHash);
   }
 }

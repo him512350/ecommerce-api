@@ -7,7 +7,7 @@ import { APP_GUARD } from '@nestjs/core';
 // Config
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
-import jwtConfig from './config/jwt.config';
+import firebaseConfig from './config/firebase.config'; // ← replaces jwtConfig
 
 // Modules
 import { AuthModule } from './modules/auth/auth.module';
@@ -23,39 +23,33 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 
 @Module({
   imports: [
-    // ── Configuration ─────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, jwtConfig],
+      load: [appConfig, databaseConfig, firebaseConfig], // ← no more jwtConfig
       envFilePath: '.env',
       cache: true,
     }),
 
-    // ── Database (Neon PostgreSQL via TypeORM) ─────────────────
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         url: config.get<string>('database.url'),
-        ssl: { rejectUnauthorized: false }, // Required for Neon
-        autoLoadEntities: true, // Loads entities registered via forFeature()
-        synchronize: config.get('app.nodeEnv') === 'development', // NEVER true in prod — use migrations
+        ssl: { rejectUnauthorized: false },
+        autoLoadEntities: true,
+        synchronize: config.get('app.nodeEnv') === 'development',
         logging: config.get('app.nodeEnv') === 'development',
-        extra: {
-          max: 10, // connection pool size
-          idleTimeoutMillis: 30000,
-        },
+        extra: { max: 10, idleTimeoutMillis: 30000 },
       }),
     }),
 
-    // ── Rate limiting ─────────────────────────────────────────
     ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 }, // 10 req/sec
-      { name: 'long', ttl: 60000, limit: 100 }, // 100 req/min
+      { name: 'short', ttl: 1000, limit: 10 },
+      { name: 'long', ttl: 60000, limit: 100 },
     ]),
 
-    // ── Feature Modules ────────────────────────────────────────
+    // AuthModule is @Global() — FirebaseAuthGuard is available everywhere
     AuthModule,
     UsersModule,
     CategoriesModule,
@@ -67,9 +61,6 @@ import { CouponsModule } from './modules/coupons/coupons.module';
     ReviewsModule,
     CouponsModule,
   ],
-  providers: [
-    // Apply rate limiting globally
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

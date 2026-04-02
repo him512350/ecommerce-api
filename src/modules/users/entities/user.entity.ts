@@ -19,21 +19,28 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Firebase UID — populated on first login, used to look up the user on every request
+  @ApiProperty()
+  @Column({ name: 'firebase_uid', unique: true, nullable: true, length: 128 })
+  @Index()
+  firebaseUid: string;
+
   @ApiProperty()
   @Column({ unique: true, length: 255 })
   @Index()
   email: string;
 
+  // Nullable — Firebase manages passwords, we no longer store a hash
   @Exclude()
-  @Column({ name: 'password_hash' })
+  @Column({ name: 'password_hash', nullable: true })
   passwordHash: string;
 
   @ApiProperty()
-  @Column({ name: 'first_name', length: 100 })
+  @Column({ name: 'first_name', length: 100, default: '' })
   firstName: string;
 
   @ApiProperty()
-  @Column({ name: 'last_name', length: 100 })
+  @Column({ name: 'last_name', length: 100, default: '' })
   lastName: string;
 
   @ApiProperty({ enum: UserRole })
@@ -43,6 +50,11 @@ export class User {
   @ApiProperty({ required: false })
   @Column({ length: 20, nullable: true })
   phone: string;
+
+  // Profile picture URL from Firebase (Google/social login)
+  @ApiProperty({ required: false })
+  @Column({ name: 'picture_url', nullable: true })
+  pictureUrl: string;
 
   @ApiProperty()
   @Column({ name: 'is_verified', default: false })
@@ -63,12 +75,10 @@ export class User {
   @DeleteDateColumn({ name: 'deleted_at' })
   deletedAt: Date;
 
-  // ── Relations ──────────────────────────────────────────────────
   @OneToMany(() => Address, (address) => address.user, { cascade: true })
   addresses: Address[];
 
-  // Computed helper
   get fullName(): string {
-    return `${this.firstName} ${this.lastName}`;
+    return `${this.firstName} ${this.lastName}`.trim();
   }
 }
