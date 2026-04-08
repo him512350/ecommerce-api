@@ -39,9 +39,12 @@ export class PaymentsService {
       throw new BadRequestException('Order is already paid');
     }
 
+    const currency =
+      this.configService.get<string>('app.paymentCurrency') ?? 'hkd';
+
     const paymentIntent = await this.stripe.paymentIntents.create({
       amount: Math.round(Number(order.total) * 100),
-      currency: 'sgd',
+      currency,
       metadata: { orderId: order.id, userId },
     });
 

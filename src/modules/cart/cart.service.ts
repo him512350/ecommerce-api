@@ -10,6 +10,7 @@ import { CartItem } from './entities/cart-item.entity';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { ProductsService } from '../products/products.service';
+import { CouponsService } from '../coupons/coupons.service';
 
 @Injectable()
 export class CartService {
@@ -19,12 +20,13 @@ export class CartService {
     @InjectRepository(CartItem)
     private readonly cartItemRepo: Repository<CartItem>,
     private readonly productsService: ProductsService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   async getOrCreateCart(userId: string): Promise<Cart> {
     let cart = await this.cartRepo.findOne({
       where: { userId },
-      relations: ['items', 'items.product', 'items.variant'],
+      relations: ['items', 'items.product', 'items.variant', 'coupon'],
     });
     if (!cart) {
       cart = this.cartRepo.create({ userId });
@@ -70,7 +72,12 @@ export class CartService {
       await this.cartItemRepo.save(item);
     }
 
-    return this.getOrCreateCart(userId);
+    // Re-fetch updated cart then recalculate discount if a coupon is applied
+    const updatedCart = await this.getOrCreateCart(userId);
+    if (updatedCart.couponCode) {
+      return this._recalculateDiscount(updatedCart);
+    }
+    return updatedCart;
   }
 
   async updateItem(
@@ -89,11 +96,93 @@ export class CartService {
       await this.cartItemRepo.save(item);
     }
 
-    return this.getOrCreateCart(userId);
+    // Re-fetch then recalculate discount in case subtotal changed
+    const updatedCart = await this.getOrCreateCart(userId);
+    if (updatedCart.couponCode) {
+      return this._recalculateDiscount(updatedCart);
+    }
+    return updatedCart;
   }
 
   async clearCart(userId: string): Promise<void> {
     const cart = await this.getOrCreateCart(userId);
     await this.cartItemRepo.delete({ cartId: cart.id });
+
+    // Also clear any applied coupon when the cart is emptied
+    cart.couponCode = null;
+    cart.couponId = null;
+    cart.coupon = null;
+    cart.discountAmount = 0;
+    await this.cartRepo.save(cart);
+  }
+
+  /**
+   * Validate and attach a coupon to the cart.
+   * The discount is calculated immediately and stored so GET /cart always
+   * returns the correct discounted total without extra work from the frontend.
+   */
+  async applyCoupon(userId: string, code: string): Promise<Cart> {
+    const cart = await this.getOrCreateCart(userId);
+
+    if (!cart.items || cart.items.length === 0) {
+      throw new BadRequestException('Cannot apply coupon to an empty cart');
+    }
+
+    // validate throws descriptive errors if code is invalid, expired, etc.
+    const coupon = await this.couponsService.validate(code, cart.subtotal);
+    const discountAmount = this.couponsService.calculateDiscount(
+      coupon,
+      cart.subtotal,
+    );
+
+    cart.couponId = coupon.id;
+    cart.coupon = coupon;
+    cart.couponCode = coupon.code;
+    cart.discountAmount = discountAmount;
+
+    await this.cartRepo.save(cart);
+    return cart;
+  }
+
+  /**
+   * Remove the currently applied coupon from the cart.
+   */
+  async removeCoupon(userId: string): Promise<Cart> {
+    const cart = await this.getOrCreateCart(userId);
+
+    cart.couponCode = null;
+    cart.couponId = null;
+    cart.coupon = null;
+    cart.discountAmount = 0;
+
+    await this.cartRepo.save(cart);
+    return cart;
+  }
+
+  /**
+   * Internal helper: re-validates the stored coupon against the current
+   * subtotal and saves the updated discount amount.
+   * Called after items change so the discount stays accurate.
+   */
+  private async _recalculateDiscount(cart: Cart): Promise<Cart> {
+    try {
+      const coupon = await this.couponsService.validate(
+        cart.couponCode!,
+        cart.subtotal,
+      );
+      cart.discountAmount = this.couponsService.calculateDiscount(
+        coupon,
+        cart.subtotal,
+      );
+    } catch {
+      // Coupon no longer valid (e.g. subtotal dropped below minimum) — remove it
+      cart.couponCode = null;
+      cart.couponId = null;
+      cart.coupon = null;
+      cart.discountAmount = 0;
+    }
+
+    await this.cartRepo.save(cart);
+    return cart;
   }
 }

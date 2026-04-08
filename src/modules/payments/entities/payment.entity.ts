@@ -25,7 +25,7 @@ export class Payment {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
 
-  @Column({ length: 3, default: 'SGD' })
+  @Column({ length: 3, default: 'HKD' })
   currency: string;
 
   @Column({

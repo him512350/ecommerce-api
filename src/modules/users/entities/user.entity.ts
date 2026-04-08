@@ -30,9 +30,10 @@ export class User {
   @Index()
   email: string;
 
-  // Nullable — Firebase manages passwords, we no longer store a hash
+  // Firebase manages passwords. This column is kept for backward compatibility
+  // only and is never loaded from the database (select: false).
   @Exclude()
-  @Column({ name: 'password_hash', nullable: true })
+  @Column({ name: 'password_hash', nullable: true, select: false })
   passwordHash: string;
 
   @ApiProperty()

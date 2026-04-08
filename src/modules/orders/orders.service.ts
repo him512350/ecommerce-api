@@ -17,7 +17,6 @@ import { OrderStatus, PaymentStatus } from '../../common/enums';
 import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 
-
 @Injectable()
 export class OrdersService {
   constructor(
@@ -28,8 +27,8 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly couponsService: CouponsService,
     private readonly dataSource: DataSource,
-    private readonly mailService: MailService, // ← add
-    private readonly usersService: UsersService, // ← add
+    private readonly mailService: MailService,
+    private readonly usersService: UsersService,
   ) {}
 
   async create(userId: string, dto: CreateOrderDto): Promise<Order> {
@@ -44,7 +43,7 @@ export class OrdersService {
       let discountAmount = 0;
       let couponId: string | undefined;
 
-      // Calculate subtotal
+      // Calculate subtotal from cart items
       const orderItems: Partial<OrderItem>[] = cart.items.map((item) => {
         const totalPrice = Number(item.unitPrice) * item.quantity;
         subtotal += totalPrice;
@@ -62,19 +61,31 @@ export class OrdersService {
         };
       });
 
-      // Apply coupon
-      if (dto.couponCode) {
-        const coupon = await this.couponsService.validate(
-          dto.couponCode,
-          subtotal,
-        );
-        discountAmount = this.couponsService.calculateDiscount(
-          coupon,
-          subtotal,
-        );
-        couponId = coupon.id;
-        await this.couponsService.incrementUsage(coupon.id);
+      // ── Coupon ────────────────────────────────────────────────────
+      // Read the coupon that was already applied and saved on the cart.
+      // We re-validate here to guard against edge cases (coupon deactivated
+      // between cart page and checkout, usage limit just hit, etc.).
+      if (cart.couponCode) {
+        try {
+          const coupon = await this.couponsService.validate(
+            cart.couponCode,
+            subtotal,
+          );
+          discountAmount = this.couponsService.calculateDiscount(
+            coupon,
+            subtotal,
+          );
+          couponId = coupon.id;
+          await this.couponsService.incrementUsage(coupon.id);
+        } catch {
+          // Coupon became invalid between cart page and checkout (expired,
+          // usage limit reached, etc.). Proceed without the discount rather
+          // than blocking the order — the frontend should surface this.
+          discountAmount = 0;
+          couponId = undefined;
+        }
       }
+      // ─────────────────────────────────────────────────────────────
 
       const taxAmount = +(subtotal * 0.09).toFixed(2); // 9% GST example
       const shippingCost = subtotal >= 50 ? 0 : 5.99;
@@ -84,6 +95,7 @@ export class OrdersService {
         shippingCost -
         discountAmount
       ).toFixed(2);
+
       const orderNumber = `ORD-${Date.now()}`;
 
       const order = manager.create(Order, {
@@ -108,7 +120,7 @@ export class OrdersService {
       );
       await manager.save(items);
 
-      // Clear cart
+      // Clear the cart (items + coupon)
       await this.cartService.clearCart(userId);
 
       // Fetch full order for email
@@ -117,7 +129,6 @@ export class OrdersService {
         relations: ['items', 'shippingAddress', 'coupon'],
       });
 
-      // Guard null before passing to mail (TypeScript safety)
       if (fullOrder) {
         const user = await this.usersService.findOne(userId);
         this.mailService.sendOrderConfirmation(fullOrder, user);
@@ -156,7 +167,7 @@ export class OrdersService {
 
   async findOne(id: string, userId?: string): Promise<Order> {
     const where: any = { id };
-    if (userId) where.userId = userId; // customers can only see their own orders
+    if (userId) where.userId = userId;
 
     const order = await this.ordersRepo.findOne({
       where,
@@ -177,6 +188,7 @@ export class OrdersService {
     order.status = dto.status;
     return this.ordersRepo.save(order);
   }
+
   async updatePaymentStatus(
     orderId: string,
     status: PaymentStatus,
