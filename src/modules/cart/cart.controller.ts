@@ -13,7 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
-import { ApplyCouponDto } from './dto/apply-coupon.dto';
+import { ApplyCouponDto } from '../promotions/dto/apply-coupon.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -25,11 +25,9 @@ export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Get()
-  @ApiOperation({
-    summary: 'Get current user cart (includes applied coupon & discount)',
-  })
+  @ApiOperation({ summary: 'Get cart with full promotion pricing breakdown' })
   getCart(@CurrentUser('id') userId: string) {
-    return this.cartService.getOrCreateCart(userId);
+    return this.cartService.getCartWithPricing(userId);
   }
 
   @Post('items')
@@ -48,29 +46,34 @@ export class CartController {
     return this.cartService.updateItem(userId, itemId, dto);
   }
 
-  // ── Coupon endpoints ──────────────────────────────────────────────
+  @Delete('items/:itemId')
+  @ApiOperation({ summary: 'Remove a single item from cart' })
+  removeItem(
+    @CurrentUser('id') userId: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+  ) {
+    return this.cartService.removeItem(userId, itemId);
+  }
+
+  @Delete()
+  @ApiOperation({ summary: 'Clear entire cart and remove any coupon' })
+  clearCart(@CurrentUser('id') userId: string) {
+    return this.cartService.clearCart(userId);
+  }
+
+  // ── Coupon endpoints ──────────────────────────────────────────────────────
 
   @Post('coupon')
-  @ApiOperation({
-    summary: 'Apply a coupon code to the cart — persisted server-side',
-  })
+  @ApiOperation({ summary: 'Apply a coupon code — returns updated pricing' })
   applyCoupon(@CurrentUser('id') userId: string, @Body() dto: ApplyCouponDto) {
     return this.cartService.applyCoupon(userId, dto.code);
   }
 
   @Delete('coupon')
   @ApiOperation({
-    summary: 'Remove the currently applied coupon from the cart',
+    summary: 'Remove the applied coupon — returns updated pricing',
   })
   removeCoupon(@CurrentUser('id') userId: string) {
     return this.cartService.removeCoupon(userId);
-  }
-
-  // ── Clear cart ───────────────────────────────────────────────────
-
-  @Delete()
-  @ApiOperation({ summary: 'Clear entire cart (also removes coupon)' })
-  clearCart(@CurrentUser('id') userId: string) {
-    return this.cartService.clearCart(userId);
   }
 }

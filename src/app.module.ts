@@ -3,17 +3,16 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { redisStore } from 'cache-manager-redis-yet';
 
-// Config
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import firebaseConfig from './config/firebase.config';
 import mailConfig from './config/mail.config';
 import storageConfig from './config/storage.config';
 
-// Modules
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CategoriesModule } from './modules/categories/categories.module';
@@ -24,13 +23,14 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
+import { TiersModule } from './modules/tiers/tiers.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
-    // ── Configuration ──────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
       load: [
@@ -44,7 +44,6 @@ import { HealthModule } from './modules/health/health.module';
       cache: true,
     }),
 
-    // ── Database ───────────────────────────────────────────────
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -53,42 +52,38 @@ import { HealthModule } from './modules/health/health.module';
         url: config.get<string>('database.url'),
         ssl: { rejectUnauthorized: false },
         autoLoadEntities: true,
-        synchronize: false, // ← always false now, migrations handle schema changes
+        synchronize: false,
         logging: config.get('app.nodeEnv') === 'development',
         migrations: [__dirname + '/database/migrations/*.{ts,js}'],
-        migrationsRun: false, // ← we run migrations manually, not on startup
+        migrationsRun: false,
         extra: { max: 10, idleTimeoutMillis: 30000 },
       }),
     }),
 
-    // ── Redis Cache (falls back to in-memory if REDIS_URL not set) ──
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
         const redisUrl = config.get<string>('REDIS_URL');
-        if (!redisUrl) {
-          // In-memory fallback — works with no Redis installed
-          return { ttl: 5 * 60 * 1000 };
-        }
+        if (!redisUrl) return { ttl: 5 * 60 * 1000 };
         try {
           const store = await redisStore({ url: redisUrl, ttl: 5 * 60 });
           return { store };
         } catch {
-          // Redis unreachable — fall back silently
           return { ttl: 5 * 60 * 1000 };
         }
       },
     }),
 
-    // ── Rate limiting ──────────────────────────────────────────
     ThrottlerModule.forRoot([
       { name: 'short', ttl: 1000, limit: 10 },
       { name: 'long', ttl: 60000, limit: 100 },
     ]),
 
-    // ── Feature Modules ────────────────────────────────────────
+    // Required for @Cron decorators in TierEvaluationService
+    ScheduleModule.forRoot(),
+
     AuthModule,
     UsersModule,
     CategoriesModule,
@@ -99,6 +94,8 @@ import { HealthModule } from './modules/health/health.module';
     PaymentsModule,
     ReviewsModule,
     CouponsModule,
+    PromotionsModule,
+    TiersModule,
     MailModule,
     UploadModule,
     HealthModule,

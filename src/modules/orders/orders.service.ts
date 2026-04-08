@@ -10,7 +10,8 @@ import { OrderItem } from './entities/order-item.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CartService } from '../cart/cart.service';
-import { CouponsService } from '../coupons/coupons.service';
+import { PromotionEngineService } from '../promotions/promotion-engine.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
 import { OrderStatus, PaymentStatus } from '../../common/enums';
@@ -25,7 +26,8 @@ export class OrdersService {
     @InjectRepository(OrderItem)
     private readonly orderItemsRepo: Repository<OrderItem>,
     private readonly cartService: CartService,
-    private readonly couponsService: CouponsService,
+    private readonly promotionEngine: PromotionEngineService,
+    private readonly promotionsService: PromotionsService,
     private readonly dataSource: DataSource,
     private readonly mailService: MailService,
     private readonly usersService: UsersService,
@@ -38,76 +40,60 @@ export class OrdersService {
       throw new BadRequestException('Cannot create order from empty cart');
     }
 
+    // Use the coupon from the DTO if provided, otherwise use what is stored on the cart
+    const couponCode = dto.couponCode ?? cart.couponCode ?? undefined;
+
+    // Run the full promotion engine to get authoritative pricing
+    const pricing = await this.promotionEngine.evaluate(
+      cart,
+      userId,
+      couponCode,
+    );
+
     return this.dataSource.transaction(async (manager) => {
-      let subtotal = 0;
-      let discountAmount = 0;
-      let couponId: string | undefined;
+      // Build order items from the engine's itemPricings
+      const orderItems: Partial<OrderItem>[] = pricing.itemPricings.map(
+        (ip) => {
+          const cartItem = cart.items.find((i) => i.id === ip.cartItemId)!;
+          return {
+            productId: ip.productId,
+            variantId: ip.variantId,
+            quantity: ip.quantity,
+            unitPrice: ip.unitPrice,
+            totalPrice: ip.finalTotal,
+            productName: ip.productName,
+            productSnapshot: {
+              sku: cartItem.product?.sku,
+              images: cartItem.product?.images?.map((i) => i.url),
+            },
+          };
+        },
+      );
 
-      // Calculate subtotal from cart items
-      const orderItems: Partial<OrderItem>[] = cart.items.map((item) => {
-        const totalPrice = Number(item.unitPrice) * item.quantity;
-        subtotal += totalPrice;
-        return {
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice,
-          productName: item.product.name,
-          productSnapshot: {
-            sku: item.product.sku,
-            images: item.product.images?.map((i) => i.url),
-          },
-        };
-      });
-
-      // ── Coupon ────────────────────────────────────────────────────
-      // Read the coupon that was already applied and saved on the cart.
-      // We re-validate here to guard against edge cases (coupon deactivated
-      // between cart page and checkout, usage limit just hit, etc.).
-      if (cart.couponCode) {
-        try {
-          const coupon = await this.couponsService.validate(
-            cart.couponCode,
-            subtotal,
-          );
-          discountAmount = this.couponsService.calculateDiscount(
-            coupon,
-            subtotal,
-          );
-          couponId = coupon.id;
-          await this.couponsService.incrementUsage(coupon.id);
-        } catch {
-          // Coupon became invalid between cart page and checkout (expired,
-          // usage limit reached, etc.). Proceed without the discount rather
-          // than blocking the order — the frontend should surface this.
-          discountAmount = 0;
-          couponId = undefined;
-        }
+      // Add free gift items (zero-priced lines)
+      for (const gift of pricing.giftItems) {
+        orderItems.push({
+          productId: gift.productId,
+          variantId: gift.variantId,
+          quantity: gift.quantity,
+          unitPrice: 0,
+          totalPrice: 0,
+          productName: `[Gift] ${gift.promotionName}`,
+          productSnapshot: { isGift: true, promotionId: gift.promotionId },
+        });
       }
-      // ─────────────────────────────────────────────────────────────
-
-      const taxAmount = +(subtotal * 0.09).toFixed(2); // 9% GST example
-      const shippingCost = subtotal >= 50 ? 0 : 5.99;
-      const total = +(
-        subtotal +
-        taxAmount +
-        shippingCost -
-        discountAmount
-      ).toFixed(2);
 
       const orderNumber = `ORD-${Date.now()}`;
 
       const order = manager.create(Order, {
         userId,
         orderNumber,
-        subtotal,
-        taxAmount,
-        shippingCost,
-        discountAmount,
-        total,
+        subtotal: pricing.subtotal,
+        taxAmount: pricing.taxAmount,
+        shippingCost: pricing.shippingCost - pricing.shippingDiscount,
+        discountAmount: pricing.itemDiscountTotal + pricing.shippingDiscount,
+        total: pricing.total,
         shippingAddressId: dto.shippingAddressId,
-        couponId,
         notes: dto.notes,
         status: OrderStatus.PENDING,
       });
@@ -120,13 +106,23 @@ export class OrdersService {
       );
       await manager.save(items);
 
-      // Clear the cart (items + coupon)
+      // Record promotion usage logs for every applied promotion
+      for (const ap of pricing.appliedPromotions) {
+        await this.promotionEngine.recordUsage(
+          ap.promotionId,
+          userId,
+          savedOrder.id,
+          ap.discountAmount,
+        );
+      }
+
+      // Clear cart (items + coupon)
       await this.cartService.clearCart(userId);
 
-      // Fetch full order for email
+      // Fetch the full order for the confirmation email
       const fullOrder = await manager.findOne(Order, {
         where: { id: savedOrder.id },
-        relations: ['items', 'shippingAddress', 'coupon'],
+        relations: ['items', 'shippingAddress'],
       });
 
       if (fullOrder) {
@@ -171,13 +167,7 @@ export class OrdersService {
 
     const order = await this.ordersRepo.findOne({
       where,
-      relations: [
-        'items',
-        'items.product',
-        'shippingAddress',
-        'coupon',
-        'payment',
-      ],
+      relations: ['items', 'items.product', 'shippingAddress', 'payment'],
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;

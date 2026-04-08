@@ -5,15 +5,17 @@ import { OrderItem } from './entities/order-item.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { CartModule } from '../cart/cart.module';
-import { CouponsModule } from '../coupons/coupons.module';
-import { MailModule } from '../mail/mail.module'; // ← add
+import { PromotionsModule } from '../promotions/promotions.module';
+import { MailModule } from '../mail/mail.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order, OrderItem]),
     CartModule,
-    CouponsModule,
-    MailModule, // ← add
+    PromotionsModule,
+    MailModule,
+    UsersModule,
   ],
   providers: [OrdersService],
   controllers: [OrdersController],

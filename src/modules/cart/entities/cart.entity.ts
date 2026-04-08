@@ -10,7 +10,6 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { CartItem } from './cart-item.entity';
-import { Coupon } from '../../coupons/entities/coupon.entity';
 
 @Entity('carts')
 export class Cart {
@@ -25,40 +24,23 @@ export class Cart {
   user: User;
 
   @Column({ name: 'session_id', nullable: true, length: 100 })
-  sessionId: string; // for guest carts
+  sessionId: string;
 
   @Column({ name: 'expires_at', nullable: true })
   expiresAt: Date;
+
+  // explicit type: 'varchar' prevents TypeORM inferring 'Object' from string | null
+  @Column({ name: 'coupon_code', type: 'varchar', nullable: true, length: 60 })
+  couponCode: string | null;
+
+  @Column({ name: 'coupon_id', type: 'uuid', nullable: true })
+  couponId: string | null;
 
   @OneToMany(() => CartItem, (item) => item.cart, {
     cascade: true,
     eager: true,
   })
   items: CartItem[];
-
-  // ── Coupon ─────────────────────────────────────────────────────
-  @Column({ name: 'coupon_id', type: 'uuid', nullable: true })
-  couponId: string | null;
-
-  @ManyToOne(() => Coupon, {
-    nullable: true,
-    eager: true,
-    onDelete: 'SET NULL',
-  })
-  coupon: Coupon | null;
-
-    @Column({ name: 'coupon_code', type: 'varchar', length: 50, nullable: true })
-  couponCode: string | null;
-
-  @Column({
-    name: 'discount_amount',
-    type: 'decimal',
-    precision: 12,
-    scale: 2,
-    default: 0,
-  })
-  discountAmount: number;
-  // ───────────────────────────────────────────────────────────────
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -67,14 +49,9 @@ export class Cart {
   updatedAt: Date;
 
   get subtotal(): number {
-    return (this.items || []).reduce(
+    return (this.items ?? []).reduce(
       (sum, item) => sum + Number(item.unitPrice) * item.quantity,
       0,
     );
-  }
-
-  /** Subtotal after discount — useful for frontend display */
-  get total(): number {
-    return Math.max(0, this.subtotal - Number(this.discountAmount));
   }
 }

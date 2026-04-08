@@ -10,7 +10,10 @@ import { CartItem } from './entities/cart-item.entity';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { ProductsService } from '../products/products.service';
-import { CouponsService } from '../coupons/coupons.service';
+import { PromotionEngineService } from '../promotions/promotion-engine.service';
+import { PromotionsService } from '../promotions/promotions.service';
+import { BundleService } from '../products/bundle.service';
+import { CartPricingResult } from '../promotions/interfaces/cart-pricing.interface';
 
 @Injectable()
 export class CartService {
@@ -20,64 +23,121 @@ export class CartService {
     @InjectRepository(CartItem)
     private readonly cartItemRepo: Repository<CartItem>,
     private readonly productsService: ProductsService,
-    private readonly couponsService: CouponsService,
+    private readonly promotionEngine: PromotionEngineService,
+    private readonly promotionsService: PromotionsService,
+    private readonly bundleService: BundleService,
   ) {}
+
+  // ── Cart retrieval ────────────────────────────────────────────────────────
 
   async getOrCreateCart(userId: string): Promise<Cart> {
     let cart = await this.cartRepo.findOne({
       where: { userId },
-      relations: ['items', 'items.product', 'items.variant', 'coupon'],
+      relations: [
+        'items',
+        'items.product',
+        'items.product.category',
+        'items.variant',
+      ],
     });
     if (!cart) {
-      cart = this.cartRepo.create({ userId });
-      cart = await this.cartRepo.save(cart);
+      cart = await this.cartRepo.save(this.cartRepo.create({ userId }));
     }
     return cart;
   }
 
+  /**
+   * Returns the cart together with a full pricing breakdown
+   * computed by the promotion engine (discounts, gifts, totals).
+   */
+  async getCartWithPricing(
+    userId: string,
+  ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
+    const cart = await this.getOrCreateCart(userId);
+    const pricing = await this.promotionEngine.evaluate(
+      cart,
+      userId,
+      cart.couponCode ?? undefined,
+    );
+    return { cart, pricing };
+  }
+
+  // ── Item management ───────────────────────────────────────────────────────
+
   async addItem(userId: string, dto: AddCartItemDto): Promise<Cart> {
     const cart = await this.getOrCreateCart(userId);
-
-    // Validate product & stock
     const product = await this.productsService.findOne(dto.productId);
+    const qty = dto.quantity ?? 1;
+
     if (!product.isActive)
       throw new BadRequestException('Product is not available');
 
+    // ── Bundle product ────────────────────────────────────────────────────
+    if (product.productType === 'bundle') {
+      if (!dto.bundleSelections?.length) {
+        // Auto-resolve default selections for fixed bundles
+        const defaults = await this.bundleService.getDefaultSelections(
+          product.id,
+        );
+        dto.bundleSelections = defaults as any;
+      }
+
+      const { unitPrice, selections } =
+        await this.bundleService.validateAndPrice(
+          product,
+          dto.bundleSelections as any,
+        );
+
+      // Bundles are always added as a new line (no merging — selections may differ)
+      await this.cartItemRepo.save(
+        this.cartItemRepo.create({
+          cartId: cart.id,
+          productId: product.id,
+          variantId: null,
+          quantity: qty,
+          unitPrice,
+          bundleSelections: selections,
+        }),
+      );
+
+      return this.getOrCreateCart(userId);
+    }
+
+    // ── Simple / variable product ─────────────────────────────────────────
     let unitPrice = Number(product.basePrice);
+
     if (dto.variantId) {
       const variant = product.variants?.find((v) => v.id === dto.variantId);
       if (!variant) throw new NotFoundException('Variant not found');
-      if (variant.inventoryQuantity < dto.quantity) {
+      if (variant.inventoryQuantity < qty) {
         throw new BadRequestException('Insufficient stock');
       }
       unitPrice = Number(variant.price);
     }
 
-    // Update quantity if item already exists
     const existingItem = cart.items?.find(
-      (i) => i.productId === dto.productId && i.variantId === dto.variantId,
+      (i) =>
+        i.productId === dto.productId &&
+        i.variantId === (dto.variantId ?? null),
     );
 
     if (existingItem) {
-      existingItem.quantity += dto.quantity;
+      existingItem.quantity += qty;
       await this.cartItemRepo.save(existingItem);
     } else {
-      const item = this.cartItemRepo.create({
-        cartId: cart.id,
-        productId: dto.productId,
-        variantId: dto.variantId,
-        quantity: dto.quantity,
-        unitPrice,
-      });
-      await this.cartItemRepo.save(item);
+      await this.cartItemRepo.save(
+        this.cartItemRepo.create({
+          cartId: cart.id,
+          productId: dto.productId,
+          variantId: dto.variantId ?? null,
+          quantity: qty,
+          unitPrice,
+          bundleSelections: null,
+        }),
+      );
     }
 
-    // Re-fetch updated cart then recalculate discount if a coupon is applied
-    const updatedCart = await this.getOrCreateCart(userId);
-    if (updatedCart.couponCode) {
-      return this._recalculateDiscount(updatedCart);
-    }
-    return updatedCart;
+    return this.getOrCreateCart(userId);
   }
 
   async updateItem(
@@ -96,93 +156,44 @@ export class CartService {
       await this.cartItemRepo.save(item);
     }
 
-    // Re-fetch then recalculate discount in case subtotal changed
-    const updatedCart = await this.getOrCreateCart(userId);
-    if (updatedCart.couponCode) {
-      return this._recalculateDiscount(updatedCart);
-    }
-    return updatedCart;
+    return this.getOrCreateCart(userId);
+  }
+
+  async removeItem(userId: string, itemId: string): Promise<Cart> {
+    return this.updateItem(userId, itemId, { quantity: 0 });
   }
 
   async clearCart(userId: string): Promise<void> {
     const cart = await this.getOrCreateCart(userId);
     await this.cartItemRepo.delete({ cartId: cart.id });
-
-    // Also clear any applied coupon when the cart is emptied
-    cart.couponCode = null;
-    cart.couponId = null;
-    cart.coupon = null;
-    cart.discountAmount = 0;
-    await this.cartRepo.save(cart);
+    // Also clear any applied coupon
+    await this.cartRepo.update(cart.id, { couponCode: null, couponId: null });
   }
 
+  // ── Coupon management ─────────────────────────────────────────────────────
+
   /**
-   * Validate and attach a coupon to the cart.
-   * The discount is calculated immediately and stored so GET /cart always
-   * returns the correct discounted total without extra work from the frontend.
+   * Validates the coupon exists and is active, then stores it on the cart.
+   * Full condition / usage-limit checks happen during pricing evaluation.
    */
-  async applyCoupon(userId: string, code: string): Promise<Cart> {
+  async applyCoupon(
+    userId: string,
+    code: string,
+  ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
+    // Validate coupon exists and is globally active
+    await this.promotionsService.findOneCoupon(code);
+
     const cart = await this.getOrCreateCart(userId);
+    await this.cartRepo.update(cart.id, { couponCode: code.toUpperCase() });
 
-    if (!cart.items || cart.items.length === 0) {
-      throw new BadRequestException('Cannot apply coupon to an empty cart');
-    }
-
-    // validate throws descriptive errors if code is invalid, expired, etc.
-    const coupon = await this.couponsService.validate(code, cart.subtotal);
-    const discountAmount = this.couponsService.calculateDiscount(
-      coupon,
-      cart.subtotal,
-    );
-
-    cart.couponId = coupon.id;
-    cart.coupon = coupon;
-    cart.couponCode = coupon.code;
-    cart.discountAmount = discountAmount;
-
-    await this.cartRepo.save(cart);
-    return cart;
+    return this.getCartWithPricing(userId);
   }
 
-  /**
-   * Remove the currently applied coupon from the cart.
-   */
-  async removeCoupon(userId: string): Promise<Cart> {
+  async removeCoupon(
+    userId: string,
+  ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
     const cart = await this.getOrCreateCart(userId);
-
-    cart.couponCode = null;
-    cart.couponId = null;
-    cart.coupon = null;
-    cart.discountAmount = 0;
-
-    await this.cartRepo.save(cart);
-    return cart;
-  }
-
-  /**
-   * Internal helper: re-validates the stored coupon against the current
-   * subtotal and saves the updated discount amount.
-   * Called after items change so the discount stays accurate.
-   */
-  private async _recalculateDiscount(cart: Cart): Promise<Cart> {
-    try {
-      const coupon = await this.couponsService.validate(
-        cart.couponCode!,
-        cart.subtotal,
-      );
-      cart.discountAmount = this.couponsService.calculateDiscount(
-        coupon,
-        cart.subtotal,
-      );
-    } catch {
-      // Coupon no longer valid (e.g. subtotal dropped below minimum) — remove it
-      cart.couponCode = null;
-      cart.couponId = null;
-      cart.coupon = null;
-      cart.discountAmount = 0;
-    }
-
-    await this.cartRepo.save(cart);
-    return cart;
+    await this.cartRepo.update(cart.id, { couponCode: null, couponId: null });
+    return this.getCartWithPricing(userId);
   }
 }

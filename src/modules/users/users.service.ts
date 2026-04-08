@@ -29,12 +29,10 @@ export class UsersService {
     @InjectRepository(Address)
     private readonly addressRepo: Repository<Address>,
     private readonly dataSource: DataSource,
-    private readonly mailService: MailService, // ← add
+    private readonly mailService: MailService,
   ) {}
 
-  // ── Firebase auto-provisioning ────────────────────────────────
-  // Called on every authenticated request by FirebaseAuthGuard.
-  // Creates the user in our DB the first time they log in via Firebase.
+  // ── Firebase auto-provisioning ────────────────────────────────────────────
 
   async findOrCreateFromFirebase(payload: FirebaseUserPayload): Promise<User> {
     // 1. Try to find by Firebase UID (fastest path for returning users)
@@ -43,16 +41,12 @@ export class UsersService {
     });
     if (user) return user;
 
-    // 2. Try to find by email (migration: user existed before Firebase was added)
-    user = await this.usersRepo.findOne({
-      where: { email: payload.email },
-    });
+    // 2. Try by email (migration path: user existed before Firebase was added)
+    user = await this.usersRepo.findOne({ where: { email: payload.email } });
     if (user) {
-      // Link Firebase UID to existing account
       user.firebaseUid = payload.firebaseUid;
-      if (payload.picture && !user.pictureUrl) {
+      if (payload.picture && !user.pictureUrl)
         user.pictureUrl = payload.picture;
-      }
       return this.usersRepo.save(user);
     }
 
@@ -67,15 +61,13 @@ export class UsersService {
     });
     const saved = await this.usersRepo.save(newUser);
 
-// Send welcome email (fire and forget — never block login)
-    this.mailService.sendWelcome(saved);
+    // Fire-and-forget welcome email — never block login
+    this.mailService.sendWelcome(saved).catch(() => {});
 
     return saved;
-
-    return this.usersRepo.save(newUser);
   }
 
-  // ── Standard CRUD ─────────────────────────────────────────────
+  // ── Standard CRUD ─────────────────────────────────────────────────────────
 
   async findAll(pagination: PaginationDto) {
     const qb = this.usersRepo
@@ -116,7 +108,7 @@ export class UsersService {
     await this.usersRepo.softRemove(user);
   }
 
-  // ── Addresses ─────────────────────────────────────────────────
+  // ── Addresses ─────────────────────────────────────────────────────────────
 
   async addAddress(userId: string, dto: CreateAddressDto): Promise<Address> {
     await this.findOne(userId);

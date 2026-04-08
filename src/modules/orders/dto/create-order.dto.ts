@@ -6,10 +6,12 @@ export class CreateOrderDto {
   @IsUUID()
   shippingAddressId: string;
 
-  // couponCode has been intentionally removed from this DTO.
-  // Coupons are now applied on the cart page (POST /cart/coupon) and
-  // stored server-side on the cart. OrdersService reads cart.couponCode
-  // directly, so there is no need to send it again at checkout.
+  @ApiPropertyOptional({
+    description: 'Coupon code — overrides any code stored on the cart',
+  })
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

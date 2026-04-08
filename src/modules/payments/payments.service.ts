@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import Stripe from 'stripe';
 import { Payment } from './entities/payment.entity';
 import { OrdersService } from '../orders/orders.service';
+import { TierEvaluationService } from '../tiers/tier-evaluation.service';
 import {
   PaymentProviderEnum,
   PaymentStatus,
@@ -25,6 +26,7 @@ export class PaymentsService {
     @InjectRepository(Payment)
     private readonly paymentsRepo: Repository<Payment>,
     private readonly ordersService: OrdersService,
+    private readonly tierEvaluationService: TierEvaluationService,
     private readonly configService: ConfigService,
   ) {
     const stripeKey = this.configService.get<string>('STRIPE_SECRET_KEY');
@@ -48,7 +50,6 @@ export class PaymentsService {
       metadata: { orderId: order.id, userId },
     });
 
-    // Store PaymentIntent ID on the order
     await this.ordersService.updatePaymentIntentId(order.id, paymentIntent.id);
 
     return {
@@ -70,7 +71,6 @@ export class PaymentsService {
     }
 
     let event: Stripe.Event;
-
     try {
       event = this.stripe.webhooks.constructEvent(
         rawBody,
@@ -106,11 +106,11 @@ export class PaymentsService {
     intent: Stripe.PaymentIntent,
   ): Promise<void> {
     const orderId = intent.metadata?.orderId;
+    const userId = intent.metadata?.userId;
 
-    // Guard: test triggers from Stripe CLI won't have a real orderId
     if (!orderId) {
       this.logger.warn(
-        `payment_intent.succeeded received with no orderId in metadata — likely a test trigger. Skipping.`,
+        'payment_intent.succeeded: no orderId in metadata — skipping',
       );
       return;
     }
@@ -128,10 +128,9 @@ export class PaymentsService {
       throw err;
     }
 
-    // Idempotency: skip if already paid
     if (order.paymentStatus === PaymentStatus.PAID) {
       this.logger.log(
-        `Order ${orderId} already marked as paid — skipping duplicate event`,
+        `Order ${orderId} already PAID — skipping duplicate event`,
       );
       return;
     }
@@ -147,23 +146,28 @@ export class PaymentsService {
       metadata: { intentId: intent.id, customerId: intent.customer },
     });
     await this.paymentsRepo.save(payment);
-
     await this.ordersService.updatePaymentStatus(orderId, PaymentStatus.PAID);
     this.logger.log(`Order ${orderId} marked as PAID`);
+
+    // Trigger tier evaluation — fire-and-forget, never blocks payment confirmation
+    if (userId) {
+      const paidAmount = intent.amount / 100;
+      this.tierEvaluationService
+        .evaluateAfterPayment(userId, orderId, paidAmount)
+        .catch((err) => this.logger.error(`Tier eval error: ${err.message}`));
+    }
   }
 
   private async handlePaymentFailed(
     intent: Stripe.PaymentIntent,
   ): Promise<void> {
     const orderId = intent.metadata?.orderId;
-
     if (!orderId) {
       this.logger.warn(
         'payment_intent.payment_failed: no orderId in metadata — skipping',
       );
       return;
     }
-
     try {
       await this.ordersService.updatePaymentStatus(
         orderId,

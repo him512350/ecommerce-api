@@ -6,12 +6,14 @@ import {
   Index,
   ManyToOne,
   OneToMany,
+  OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
 import { ProductImage } from './product-image.entity';
 import { ProductVariant } from './product-variant.entity';
+import { BundleConfig } from './bundle-config.entity';
 
 @Entity('products')
 export class Product {
@@ -53,6 +55,15 @@ export class Product {
   @ManyToOne(() => Category, (cat) => cat.products, { nullable: true })
   category: Category;
 
+  // 'simple' (default) | 'variable' | 'bundle'
+  @Column({
+    name: 'product_type',
+    type: 'varchar',
+    length: 20,
+    default: 'simple',
+  })
+  productType: string;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
@@ -60,7 +71,7 @@ export class Product {
   isFeatured: boolean;
 
   @Column({ type: 'decimal', precision: 8, scale: 3, nullable: true })
-  weight: number; // in kg
+  weight: number;
 
   @Column({
     name: 'average_rating',
@@ -75,7 +86,7 @@ export class Product {
   reviewCount: number;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: Record<string, any>; // flexible extra fields
+  metadata: Record<string, any>;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -86,7 +97,6 @@ export class Product {
   @DeleteDateColumn({ name: 'deleted_at' })
   deletedAt: Date;
 
-  // ── Relations ──────────────────────────────────────────────────
   @OneToMany(() => ProductImage, (img) => img.product, {
     cascade: true,
     eager: true,
@@ -95,4 +105,8 @@ export class Product {
 
   @OneToMany(() => ProductVariant, (v) => v.product, { cascade: true })
   variants: ProductVariant[];
+
+  // Populated only when productType === 'bundle'
+  @OneToOne(() => BundleConfig, (bc) => bc.product, { nullable: true })
+  bundleConfig: BundleConfig;
 }
