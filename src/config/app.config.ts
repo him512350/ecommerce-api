@@ -8,4 +8,7 @@ export default registerAs('app', () => ({
   // ISO 4217 currency code used for Stripe PaymentIntents.
   // Defaults to Hong Kong Dollar. Override via PAYMENT_CURRENCY env var.
   paymentCurrency: (process.env.PAYMENT_CURRENCY || 'hkd').toLowerCase(),
+  // Decimal tax rate applied during cart pricing (e.g. 0.08 = 8%).
+  // Defaults to 0 — Hong Kong has no GST/VAT. Override via TAX_RATE env var.
+  taxRate: parseFloat(process.env.TAX_RATE ?? '0'),
 }));

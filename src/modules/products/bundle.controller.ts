@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BundleService } from './bundle.service';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums';
@@ -33,7 +33,7 @@ export class BundleController {
   // ── Admin: bundle config ──────────────────────────────────────────────────
 
   @Post(':productId/bundle')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create bundle config for a product (admin)' })
   createConfig(
@@ -44,7 +44,7 @@ export class BundleController {
   }
 
   @Patch(':productId/bundle')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update bundle config (admin)' })
   updateConfig(
@@ -55,7 +55,7 @@ export class BundleController {
   }
 
   @Delete(':productId/bundle')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Delete bundle config and revert product to simple (admin)',
@@ -67,7 +67,7 @@ export class BundleController {
   // ── Admin: groups ─────────────────────────────────────────────────────────
 
   @Post(':productId/bundle/groups')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Add a group to a bundle (admin)' })
   addGroup(
@@ -78,7 +78,7 @@ export class BundleController {
   }
 
   @Patch('bundle/groups/:groupId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update a bundle group (admin)' })
   updateGroup(
@@ -89,7 +89,7 @@ export class BundleController {
   }
 
   @Delete('bundle/groups/:groupId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete a bundle group (admin)' })
   deleteGroup(@Param('groupId', ParseUUIDPipe) groupId: string) {
@@ -99,7 +99,7 @@ export class BundleController {
   // ── Admin: group items ────────────────────────────────────────────────────
 
   @Post('bundle/groups/:groupId/items')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Add an item to a bundle group (admin)' })
   addGroupItem(
@@ -110,7 +110,7 @@ export class BundleController {
   }
 
   @Patch('bundle/groups/items/:itemId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update a bundle group item (admin)' })
   updateGroupItem(
@@ -121,7 +121,7 @@ export class BundleController {
   }
 
   @Delete('bundle/groups/items/:itemId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Delete a bundle group item (admin)' })
   deleteGroupItem(@Param('itemId', ParseUUIDPipe) itemId: string) {

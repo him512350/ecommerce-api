@@ -13,7 +13,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums';
@@ -24,7 +24,7 @@ export class CouponsController {
   constructor(private readonly couponsService: CouponsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create coupon (admin)' })
@@ -33,7 +33,7 @@ export class CouponsController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   findAll() {
@@ -41,7 +41,7 @@ export class CouponsController {
   }
 
   @Post('validate')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Validate a coupon code before checkout' })
   async validate(@Body() dto: ValidateCouponDto) {
@@ -54,7 +54,7 @@ export class CouponsController {
   }
 
   @Delete(':id/deactivate')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   deactivate(@Param('id', ParseUUIDPipe) id: string) {

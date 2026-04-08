@@ -8,7 +8,7 @@ import {
   AdjustPointsDto, RedeemPointsDto,
   UpdatePointsConfigDto, UpsertRoleConfigDto,
 } from './dto/points.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -18,7 +18,7 @@ import { UserRole } from '../../common/enums';
 
 @ApiTags('Points — Admin')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(FirebaseAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @Controller('points')
 export class PointsAdminController {
@@ -91,7 +91,7 @@ export class PointsAdminController {
 
 @ApiTags('Points — Customer')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 @Controller('points/me')
 export class PointsCustomerController {
   constructor(private readonly pointsService: PointsService) {}

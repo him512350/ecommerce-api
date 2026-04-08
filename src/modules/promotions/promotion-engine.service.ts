@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Promotion } from './entities/promotion.entity';
@@ -36,11 +37,11 @@ interface EvalContext {
   now: Date;
 }
 
-const TAX_RATE = 0.0; // HK has no GST — set > 0 if needed
-
 @Injectable()
 export class PromotionEngineService {
   private readonly logger = new Logger(PromotionEngineService.name);
+  private readonly taxRate: number;
+  private readonly currency: string;
 
   constructor(
     @InjectRepository(Promotion)
@@ -51,7 +52,13 @@ export class PromotionEngineService {
     private readonly segmentsRepo: Repository<UserSegment>,
     @InjectRepository(Order)
     private readonly ordersRepo: Repository<Order>,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.taxRate = this.configService.get<number>('app.taxRate') ?? 0;
+    this.currency = (
+      this.configService.get<string>('app.paymentCurrency') ?? 'hkd'
+    ).toUpperCase();
+  }
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -125,7 +132,7 @@ export class PromotionEngineService {
       });
 
       this.logger.log(
-        `Promotion "${promo.name}" applied — discount HKD ${promoDiscount.toFixed(2)}`,
+        `Promotion "${promo.name}" applied — discount ${this.currency} ${promoDiscount.toFixed(2)}`,
       );
     }
 
@@ -702,7 +709,7 @@ export class PromotionEngineService {
     const itemDiscountTotal = +itemPricings
       .reduce((s, i) => s + i.discountAmount, 0)
       .toFixed(2);
-    const taxAmount = +((subtotal - itemDiscountTotal) * TAX_RATE).toFixed(2);
+    const taxAmount = +((subtotal - itemDiscountTotal) * this.taxRate).toFixed(2);
 
     // Shipping cost and final total are computed by CartService using the
     // real ShippingCalculatorService. The engine only signals whether a

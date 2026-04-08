@@ -17,12 +17,12 @@ import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { ApplyCouponDto } from '../promotions/dto/apply-coupon.dto';
 import { SelectShippingMethodDto } from '../shipping/dto/shipping.dto';
 import { RedeemPointsDto } from '../points/dto/points.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Cart')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 @Controller('cart')
 export class CartController {
   constructor(private readonly cartService: CartService) {}

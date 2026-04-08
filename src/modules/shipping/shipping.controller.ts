@@ -18,7 +18,7 @@ import {
   CreateShippingRateDto,
   CreateShippingZoneDto,
 } from './dto/shipping.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums';
@@ -53,7 +53,7 @@ export class ShippingController {
   // ── Admin: zones ──────────────────────────────────────────────────────────
 
   @Post('zones')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create shipping zone (admin)' })
@@ -62,7 +62,7 @@ export class ShippingController {
   }
 
   @Get('zones')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List all shipping zones with methods and rates (admin)' })
@@ -71,7 +71,7 @@ export class ShippingController {
   }
 
   @Get('zones/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   getZone(@Param('id', ParseUUIDPipe) id: string) {
@@ -79,7 +79,7 @@ export class ShippingController {
   }
 
   @Patch('zones/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a shipping zone (admin)' })
@@ -91,7 +91,7 @@ export class ShippingController {
   }
 
   @Delete('zones/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a shipping zone and all its methods (admin)' })
@@ -102,7 +102,7 @@ export class ShippingController {
   // ── Admin: methods ────────────────────────────────────────────────────────
 
   @Post('zones/:zoneId/methods')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Add a shipping method to a zone (admin)' })
@@ -114,7 +114,7 @@ export class ShippingController {
   }
 
   @Patch('methods/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a shipping method (admin)' })
@@ -126,7 +126,7 @@ export class ShippingController {
   }
 
   @Delete('methods/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a shipping method (admin)' })
@@ -137,7 +137,7 @@ export class ShippingController {
   // ── Admin: rates ──────────────────────────────────────────────────────────
 
   @Post('methods/:methodId/rates')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Add a rate rule to a shipping method (admin)' })
@@ -149,7 +149,7 @@ export class ShippingController {
   }
 
   @Patch('rates/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a rate rule (admin)' })
@@ -161,7 +161,7 @@ export class ShippingController {
   }
 
   @Delete('rates/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(FirebaseAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a rate rule (admin)' })

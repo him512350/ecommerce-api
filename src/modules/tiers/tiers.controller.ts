@@ -21,7 +21,7 @@ import { TierEvaluationService } from './tier-evaluation.service';
 import { CreateTierConfigDto } from './dto/create-tier-config.dto';
 import { UpdateTierConfigDto } from './dto/update-tier-config.dto';
 import { ManualTierOverrideDto } from './dto/manual-override.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -29,7 +29,7 @@ import { UserRole } from '../../common/enums';
 
 @ApiTags('Tiers')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 @Controller('tiers')
 export class TiersController {
   constructor(

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -65,11 +65,22 @@ import { HealthModule } from './modules/health/health.module';
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
         const redisUrl = config.get<string>('REDIS_URL');
-        if (!redisUrl) return { ttl: 5 * 60 * 1000 };
+        if (!redisUrl) {
+          new Logger('CacheModule').warn(
+            'REDIS_URL is not set — falling back to in-memory cache. ' +
+              'This is NOT suitable for production or multi-instance deployments.',
+          );
+          return { ttl: 5 * 60 * 1000 };
+        }
         try {
           const store = await redisStore({ url: redisUrl, ttl: 5 * 60 });
+          new Logger('CacheModule').log(`Redis cache connected: ${redisUrl}`);
           return { store };
-        } catch {
+        } catch (err) {
+          new Logger('CacheModule').warn(
+            `Failed to connect to Redis (${redisUrl}): ${(err as Error).message}. ` +
+              'Falling back to in-memory cache.',
+          );
           return { ttl: 5 * 60 * 1000 };
         }
       },
