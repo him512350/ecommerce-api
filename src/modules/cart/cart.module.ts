@@ -7,6 +7,7 @@ import { CartController } from './cart.controller';
 import { ProductsModule } from '../products/products.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { ShippingModule } from '../shipping/shipping.module';
+import { PointsModule } from '../points/points.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ShippingModule } from '../shipping/shipping.module';
     ProductsModule,
     PromotionsModule,
     ShippingModule,
+    PointsModule,
   ],
   providers: [CartService],
   controllers: [CartController],

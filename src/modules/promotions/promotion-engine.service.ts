@@ -712,13 +712,16 @@ export class PromotionEngineService {
       giftItems,
       subtotal: +subtotal.toFixed(2),
       itemDiscountTotal,
-      availableShipping: [], // filled in by CartService
-      shippingCost: 0, // overridden by CartService
+      availableShipping: [],
+      shippingCost: 0,
       shippingDiscount: Math.min(shippingDiscount, 999_999),
+      // Points fields are always overridden by CartService — zeroed here as placeholders
+      redeemedPoints: 0,
+      pointsDiscount: 0,
       taxAmount,
       total: +(subtotal - itemDiscountTotal + taxAmount).toFixed(2),
       appliedPromotions,
-      selectedShippingMethodId: null, // overridden by CartService
+      selectedShippingMethodId: null,
     };
   }
 

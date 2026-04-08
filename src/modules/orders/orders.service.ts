@@ -13,6 +13,7 @@ import { CartService } from '../cart/cart.service';
 import { PromotionEngineService } from '../promotions/promotion-engine.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { ShippingCalculatorService } from '../shipping/shipping-calculator.service';
+import { PointsService } from '../points/points.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
 import { OrderStatus, PaymentStatus } from '../../common/enums';
@@ -30,6 +31,7 @@ export class OrdersService {
     private readonly promotionEngine: PromotionEngineService,
     private readonly promotionsService: PromotionsService,
     private readonly shippingCalculator: ShippingCalculatorService,
+    private readonly pointsService: PointsService,
     private readonly dataSource: DataSource,
     private readonly mailService: MailService,
     private readonly usersService: UsersService,
@@ -97,8 +99,21 @@ export class OrdersService {
           realShippingCost = 0;
         }
       }
+      // ── Points redemption ──────────────────────────────────────────────
+      const redeemedPoints = cart.redeemedPoints ?? 0;
+      let pointsDiscount = 0;
+      if (redeemedPoints > 0) {
+        pointsDiscount = await this.pointsService
+          .computeDiscount(userId, redeemedPoints)
+          .catch(() => 0);
+      }
+
       const realTotal = +(
-        pricing.subtotal - pricing.itemDiscountTotal + realShippingCost + pricing.taxAmount
+        pricing.subtotal -
+        pricing.itemDiscountTotal -
+        pointsDiscount +
+        realShippingCost +
+        pricing.taxAmount
       ).toFixed(2);
 
       const order = manager.create(Order, {
@@ -107,7 +122,7 @@ export class OrdersService {
         subtotal:        pricing.subtotal,
         taxAmount:       pricing.taxAmount,
         shippingCost:    realShippingCost,
-        discountAmount:  pricing.itemDiscountTotal,
+        discountAmount:  pricing.itemDiscountTotal + pointsDiscount,
         total:           Math.max(0, realTotal),
         shippingAddressId: dto.shippingAddressId,
         notes:           dto.notes,
@@ -122,14 +137,19 @@ export class OrdersService {
       );
       await manager.save(items);
 
-      // Record promotion usage logs for every applied promotion
+      // Record promotion usage logs
       for (const ap of pricing.appliedPromotions) {
         await this.promotionEngine.recordUsage(
-          ap.promotionId,
-          userId,
-          savedOrder.id,
-          ap.discountAmount,
+          ap.promotionId, userId, savedOrder.id, ap.discountAmount,
         );
+      }
+
+      // Deduct redeemed points — outside the transaction so a points failure
+      // doesn't roll back a successfully placed order
+      if (redeemedPoints > 0 && pointsDiscount > 0) {
+        this.pointsService
+          .deductForOrder(userId, savedOrder.id, redeemedPoints, pointsDiscount)
+          .catch((err) => console.error(`Points deduction failed for order ${savedOrder.id}: ${err.message}`));
       }
 
       // Clear cart (items + coupon)

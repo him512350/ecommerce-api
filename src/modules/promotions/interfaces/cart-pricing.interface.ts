@@ -45,11 +45,12 @@ export interface CartPricingResult {
   giftItems: GiftItem[];
   subtotal: number;
   itemDiscountTotal: number;
-  // Available shipping options for the cart's country (or empty if no address set)
   availableShipping: ShippingOption[];
-  // Cost of the currently selected shipping method (0 if none selected)
   shippingCost: number;
-  shippingDiscount: number; // from free_shipping promotion action
+  shippingDiscount: number;
+  // Points redemption
+  redeemedPoints: number;       // points applied to this cart
+  pointsDiscount: number;       // HKD value of those points
   taxAmount: number;
   total: number;
   appliedPromotions: AppliedPromotion[];

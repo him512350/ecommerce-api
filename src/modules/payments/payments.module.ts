@@ -5,9 +5,10 @@ import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { OrdersModule } from '../orders/orders.module';
 import { TiersModule } from '../tiers/tiers.module';
+import { PointsModule } from '../points/points.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment]), OrdersModule, TiersModule],
+  imports: [TypeOrmModule.forFeature([Payment]), OrdersModule, TiersModule, PointsModule],
   providers: [PaymentsService],
   controllers: [PaymentsController],
 })

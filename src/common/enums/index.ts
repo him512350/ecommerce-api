@@ -133,3 +133,14 @@ export enum ShippingRateType {
   PER_ITEM = 'per_item', // cost × number of line items
   PERCENTAGE = 'percentage', // percentage of cart subtotal
 }
+
+// ── Points enums ──────────────────────────────────────────────────────────────
+
+export enum PointsTransactionType {
+  EARNED = 'earned',
+  REDEEMED = 'redeemed',
+  EXPIRED = 'expired',
+  ADJUSTED_ADD = 'adjusted_add',
+  ADJUSTED_DEDUCT = 'adjusted_deduct',
+  REFUNDED = 'refunded',
+}

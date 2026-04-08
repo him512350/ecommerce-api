@@ -16,6 +16,7 @@ import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { ApplyCouponDto } from '../promotions/dto/apply-coupon.dto';
 import { SelectShippingMethodDto } from '../shipping/dto/shipping.dto';
+import { RedeemPointsDto } from '../points/dto/points.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -98,5 +99,24 @@ export class CartController {
   @ApiOperation({ summary: 'Clear the selected shipping method' })
   clearShipping(@CurrentUser('id') userId: string) {
     return this.cartService.clearShippingMethod(userId);
+  }
+
+  // ── Points redemption endpoints ───────────────────────────────────────────
+
+  @Post('points')
+  @ApiOperation({ summary: 'Apply points to cart for a discount' })
+  @ApiQuery({ name: 'country', required: false, example: 'HK' })
+  redeemPoints(
+    @CurrentUser('id') userId: string,
+    @Body() dto: RedeemPointsDto,
+    @Query('country') country = 'HK',
+  ) {
+    return this.cartService.redeemPoints(userId, dto.points, country.toUpperCase());
+  }
+
+  @Delete('points')
+  @ApiOperation({ summary: 'Remove points redemption from cart' })
+  cancelPoints(@CurrentUser('id') userId: string) {
+    return this.cartService.cancelPointsRedemption(userId);
   }
 }

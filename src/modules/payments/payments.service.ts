@@ -11,6 +11,7 @@ import Stripe from 'stripe';
 import { Payment } from './entities/payment.entity';
 import { OrdersService } from '../orders/orders.service';
 import { TierEvaluationService } from '../tiers/tier-evaluation.service';
+import { PointsService } from '../points/points.service';
 import {
   PaymentProviderEnum,
   PaymentStatus,
@@ -27,6 +28,7 @@ export class PaymentsService {
     private readonly paymentsRepo: Repository<Payment>,
     private readonly ordersService: OrdersService,
     private readonly tierEvaluationService: TierEvaluationService,
+    private readonly pointsService: PointsService,
     private readonly configService: ConfigService,
   ) {
     const stripeKey = this.configService.get<string>('STRIPE_SECRET_KEY');
@@ -59,28 +61,18 @@ export class PaymentsService {
   }
 
   async handleStripeWebhook(rawBody: Buffer, signature: string): Promise<void> {
-    const webhookSecret = this.configService.get<string>(
-      'STRIPE_WEBHOOK_SECRET',
-    );
+    const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
 
     if (!webhookSecret) {
-      this.logger.warn(
-        'STRIPE_WEBHOOK_SECRET not configured — skipping signature check',
-      );
+      this.logger.warn('STRIPE_WEBHOOK_SECRET not configured — skipping signature check');
       return;
     }
 
     let event: Stripe.Event;
     try {
-      event = this.stripe.webhooks.constructEvent(
-        rawBody,
-        signature,
-        webhookSecret,
-      );
+      event = this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (err) {
-      this.logger.error(
-        `Webhook signature verification failed: ${err.message}`,
-      );
+      this.logger.error(`Webhook signature verification failed: ${err.message}`);
       throw new BadRequestException('Invalid webhook signature');
     }
 
@@ -88,30 +80,22 @@ export class PaymentsService {
 
     switch (event.type) {
       case 'payment_intent.succeeded':
-        await this.handlePaymentSucceeded(
-          event.data.object as Stripe.PaymentIntent,
-        );
+        await this.handlePaymentSucceeded(event.data.object as Stripe.PaymentIntent);
         break;
       case 'payment_intent.payment_failed':
-        await this.handlePaymentFailed(
-          event.data.object as Stripe.PaymentIntent,
-        );
+        await this.handlePaymentFailed(event.data.object as Stripe.PaymentIntent);
         break;
       default:
         this.logger.log(`Unhandled Stripe event type: ${event.type} — ignored`);
     }
   }
 
-  private async handlePaymentSucceeded(
-    intent: Stripe.PaymentIntent,
-  ): Promise<void> {
+  private async handlePaymentSucceeded(intent: Stripe.PaymentIntent): Promise<void> {
     const orderId = intent.metadata?.orderId;
-    const userId = intent.metadata?.userId;
+    const userId  = intent.metadata?.userId;
 
     if (!orderId) {
-      this.logger.warn(
-        'payment_intent.succeeded: no orderId in metadata — skipping',
-      );
+      this.logger.warn('payment_intent.succeeded: no orderId in metadata — skipping');
       return;
     }
 
@@ -120,18 +104,14 @@ export class PaymentsService {
       order = await this.ordersService.findOne(orderId);
     } catch (err) {
       if (err instanceof NotFoundException) {
-        this.logger.warn(
-          `payment_intent.succeeded: order ${orderId} not found — skipping`,
-        );
+        this.logger.warn(`payment_intent.succeeded: order ${orderId} not found — skipping`);
         return;
       }
       throw err;
     }
 
     if (order.paymentStatus === PaymentStatus.PAID) {
-      this.logger.log(
-        `Order ${orderId} already PAID — skipping duplicate event`,
-      );
+      this.logger.log(`Order ${orderId} already PAID — skipping duplicate event`);
       return;
     }
 
@@ -152,33 +132,30 @@ export class PaymentsService {
     // Trigger tier evaluation — fire-and-forget, never blocks payment confirmation
     if (userId) {
       const paidAmount = intent.amount / 100;
+
       this.tierEvaluationService
         .evaluateAfterPayment(userId, orderId, paidAmount)
         .catch((err) => this.logger.error(`Tier eval error: ${err.message}`));
+
+      // Award loyalty points — fire-and-forget
+      this.pointsService
+        .awardForOrder(userId, orderId, paidAmount)
+        .catch((err) => this.logger.error(`Points award error: ${err.message}`));
     }
   }
 
-  private async handlePaymentFailed(
-    intent: Stripe.PaymentIntent,
-  ): Promise<void> {
+  private async handlePaymentFailed(intent: Stripe.PaymentIntent): Promise<void> {
     const orderId = intent.metadata?.orderId;
     if (!orderId) {
-      this.logger.warn(
-        'payment_intent.payment_failed: no orderId in metadata — skipping',
-      );
+      this.logger.warn('payment_intent.payment_failed: no orderId in metadata — skipping');
       return;
     }
     try {
-      await this.ordersService.updatePaymentStatus(
-        orderId,
-        PaymentStatus.FAILED,
-      );
+      await this.ordersService.updatePaymentStatus(orderId, PaymentStatus.FAILED);
       this.logger.log(`Order ${orderId} marked as FAILED`);
     } catch (err) {
       if (err instanceof NotFoundException) {
-        this.logger.warn(
-          `payment_intent.payment_failed: order ${orderId} not found — skipping`,
-        );
+        this.logger.warn(`payment_intent.payment_failed: order ${orderId} not found — skipping`);
         return;
       }
       throw err;

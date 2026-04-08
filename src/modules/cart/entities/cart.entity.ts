@@ -1,12 +1,6 @@
 import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  ManyToOne,
-  OneToMany,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
+  Column, CreateDateColumn, Entity, Index,
+  ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { CartItem } from './cart-item.entity';
@@ -29,21 +23,20 @@ export class Cart {
   @Column({ name: 'expires_at', nullable: true })
   expiresAt: Date;
 
-  // explicit type:'varchar' prevents TypeORM inferring 'Object' from string|null
   @Column({ name: 'coupon_code', type: 'varchar', nullable: true, length: 60 })
   couponCode: string | null;
 
   @Column({ name: 'coupon_id', type: 'uuid', nullable: true })
   couponId: string | null;
 
-  // Shipping method selected by the customer at cart stage
   @Column({ name: 'selected_shipping_method_id', type: 'uuid', nullable: true })
   selectedShippingMethodId: string | null;
 
-  @OneToMany(() => CartItem, (item) => item.cart, {
-    cascade: true,
-    eager: true,
-  })
+  // Points the customer has chosen to redeem at checkout
+  @Column({ name: 'redeemed_points', type: 'int', nullable: true })
+  redeemedPoints: number | null;
+
+  @OneToMany(() => CartItem, (item) => item.cart, { cascade: true, eager: true })
   items: CartItem[];
 
   @CreateDateColumn({ name: 'created_at' })
@@ -54,8 +47,7 @@ export class Cart {
 
   get subtotal(): number {
     return (this.items ?? []).reduce(
-      (sum, item) => sum + Number(item.unitPrice) * item.quantity,
-      0,
+      (sum, item) => sum + Number(item.unitPrice) * item.quantity, 0,
     );
   }
 }

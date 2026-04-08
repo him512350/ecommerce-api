@@ -14,6 +14,7 @@ import { PromotionEngineService } from '../promotions/promotion-engine.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { BundleService } from '../products/bundle.service';
 import { ShippingCalculatorService } from '../shipping/shipping-calculator.service';
+import { PointsService } from '../points/points.service';
 import { CartPricingResult } from '../promotions/interfaces/cart-pricing.interface';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class CartService {
     private readonly promotionsService: PromotionsService,
     private readonly bundleService: BundleService,
     private readonly shippingCalculator: ShippingCalculatorService,
+    private readonly pointsService: PointsService,
   ) {}
 
   // ── Cart retrieval ────────────────────────────────────────────────────────
@@ -82,9 +84,16 @@ export class CartService {
     const shippingDiscount = Math.min(promoResult.shippingDiscount, shippingCost);
     const netShipping = shippingCost - shippingDiscount;
 
+    // Points discount
+    const redeemedPoints = cart.redeemedPoints ?? 0;
+    const pointsDiscount = redeemedPoints > 0
+      ? await this.pointsService.computeDiscount(userId, redeemedPoints).catch(() => 0)
+      : 0;
+
     const total = +(
       promoResult.subtotal -
-      promoResult.itemDiscountTotal +
+      promoResult.itemDiscountTotal -
+      pointsDiscount +
       netShipping +
       promoResult.taxAmount
     ).toFixed(2);
@@ -94,6 +103,8 @@ export class CartService {
       availableShipping,
       shippingCost: netShipping,
       shippingDiscount,
+      redeemedPoints,
+      pointsDiscount,
       total: Math.max(0, total),
       selectedShippingMethodId: cart.selectedShippingMethodId,
     };
@@ -202,6 +213,31 @@ export class CartService {
     return this.updateItem(userId, itemId, { quantity: 0 });
   }
 
+  async redeemPoints(
+    userId: string,
+    points: number,
+    countryCode = 'HK',
+  ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
+    const cart = await this.getOrCreateCart(userId);
+
+    // Validate and get capped points
+    const afterDiscount = await this.pointsService.validateRedemption(
+      userId,
+      points,
+      cart.subtotal,
+    );
+
+    await this.cartRepo.update(cart.id, { redeemedPoints: afterDiscount });
+    return this.getCartWithPricing(userId, countryCode);
+  }
+
+  async cancelPointsRedemption(
+    userId: string,
+  ): Promise<void> {
+    const cart = await this.getOrCreateCart(userId);
+    await this.cartRepo.update(cart.id, { redeemedPoints: null });
+  }
+
   async clearCart(userId: string): Promise<void> {
     const cart = await this.getOrCreateCart(userId);
     await this.cartItemRepo.delete({ cartId: cart.id });
@@ -209,6 +245,7 @@ export class CartService {
       couponCode: null,
       couponId: null,
       selectedShippingMethodId: null,
+      redeemedPoints: null,
     });
   }
 
