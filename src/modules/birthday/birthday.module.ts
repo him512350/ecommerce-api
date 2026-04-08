@@ -6,13 +6,13 @@ import { User } from '../users/entities/user.entity';
 import { BirthdayCouponService } from './birthday-coupon.service';
 import { BirthdayController } from './birthday.controller';
 import { PromotionsModule } from '../promotions/promotions.module';
-import { MailModule } from '../mail/mail.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([BirthdayCouponConfig, BirthdayCouponLog, User]),
     PromotionsModule,
-    MailModule,
+    EmailModule,
   ],
   providers: [BirthdayCouponService],
   controllers: [BirthdayController],

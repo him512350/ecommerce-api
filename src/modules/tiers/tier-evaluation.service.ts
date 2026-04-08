@@ -7,12 +7,14 @@ import { UserTierMembership } from './entities/user-tier-membership.entity';
 import { UserTierHistory } from './entities/user-tier-history.entity';
 import { UserSegment } from '../users/entities/user-segment.entity';
 import { Order } from '../orders/entities/order.entity';
+import { User } from '../users/entities/user.entity';
+import { EmailService } from '../email/email.service';
+import { EmailType, PaymentStatus } from '../../common/enums';
 import {
   TierChangeReason,
   UpgradeCondition,
   UpgradeConditionGroup,
 } from './interfaces/tier-rules.interface';
-import { PaymentStatus } from '../../common/enums';
 
 const BASE_TIER = 'customer';
 const BASE_PRIORITY = 0;
@@ -32,6 +34,9 @@ export class TierEvaluationService {
     private readonly segmentRepo: Repository<UserSegment>,
     @InjectRepository(Order)
     private readonly ordersRepo: Repository<Order>,
+    @InjectRepository(User)
+    private readonly usersRepo: Repository<User>,
+    private readonly emailService: EmailService,
   ) {}
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -49,9 +54,7 @@ export class TierEvaluationService {
       await this.runUpgradeCheck(userId, orderId, paidAmount);
     } catch (err) {
       // Never block payment flow — log and swallow
-      this.logger.error(
-        `Tier evaluation failed for user ${userId}: ${err.message}`,
-      );
+      this.logger.error(`Tier evaluation failed for user ${userId}: ${err.message}`);
     }
   }
 
@@ -69,15 +72,9 @@ export class TierEvaluationService {
     const fromTier = membership.tierName;
 
     if (tierName === BASE_TIER) {
-      return this.downgradeToBase(
-        userId,
-        'admin_reset',
-        `admin:${adminId}`,
-        null,
-        {
-          reason: reason ?? 'Admin reset',
-        },
-      );
+      return this.downgradeToBase(userId, 'admin_reset', `admin:${adminId}`, null, {
+        reason: reason ?? 'Admin reset',
+      });
     }
 
     const config = await this.tierConfigRepo.findOne({ where: { tierName } });
@@ -88,18 +85,10 @@ export class TierEvaluationService {
       expiresAt ??
       new Date(now.getTime() + config.membershipDurationDays * 86_400_000);
 
-    return this.applyTierChange(
-      userId,
-      config,
-      null,
-      expiry,
-      `admin:${adminId}`,
-      {
-        fromTier,
-        reason: reason ?? 'Admin override',
-      },
-      'admin_upgrade',
-    );
+    return this.applyTierChange(userId, config, null, expiry, `admin:${adminId}`, {
+      fromTier,
+      reason: reason ?? 'Admin override',
+    }, 'admin_upgrade');
   }
 
   /**
@@ -217,18 +206,8 @@ export class TierEvaluationService {
       membership.startedAt = new Date();
       membership.expiresAt = newExpiry;
       await this.membershipRepo.save(membership);
-      await this.writeHistory(
-        membership.userId,
-        membership.tierName,
-        membership.tierName,
-        'renewal',
-        'cron',
-        null,
-        meta,
-      );
-      this.logger.log(
-        `Renewed ${membership.tierName} for user ${membership.userId}`,
-      );
+      await this.writeHistory(membership.userId, membership.tierName, membership.tierName, 'renewal', 'cron', null, meta);
+      this.logger.log(`Renewed ${membership.tierName} for user ${membership.userId}`);
     } else {
       // Downgrade — find next lower active tier, or reset to base
       const lowerTier = await this.findNextLowerTier(config.priority);
@@ -246,13 +225,7 @@ export class TierEvaluationService {
           'expiry_downgrade',
         );
       } else {
-        await this.downgradeToBase(
-          membership.userId,
-          'expiry_downgrade',
-          'cron',
-          null,
-          { expired: true },
-        );
+        await this.downgradeToBase(membership.userId, 'expiry_downgrade', 'cron', null, { expired: true });
       }
     }
   }
@@ -263,11 +236,7 @@ export class TierEvaluationService {
     userId: string,
     config: TierConfig,
     singleOrderAmount: number,
-  ): Promise<{
-    qualifies: boolean;
-    reason: TierChangeReason;
-    meta: Record<string, any>;
-  }> {
+  ): Promise<{ qualifies: boolean; reason: TierChangeReason; meta: Record<string, any> }> {
     for (const group of config.upgradeConditionGroups) {
       const { passed, reason, meta } = await this.evaluateGroup(
         userId,
@@ -294,15 +263,9 @@ export class TierEvaluationService {
     userId: string,
     group: UpgradeConditionGroup,
     singleOrderAmount: number,
-  ): Promise<{
-    passed: boolean;
-    reason: TierChangeReason;
-    meta: Record<string, any>;
-  }> {
+  ): Promise<{ passed: boolean; reason: TierChangeReason; meta: Record<string, any> }> {
     const results = await Promise.all(
-      group.conditions.map((c) =>
-        this.evaluateCondition(userId, c, singleOrderAmount),
-      ),
+      group.conditions.map((c) => this.evaluateCondition(userId, c, singleOrderAmount)),
     );
 
     const allMeta = Object.assign({}, ...results.map((r) => r.meta));
@@ -310,29 +273,17 @@ export class TierEvaluationService {
 
     if (group.operator === 'AND') {
       const passed = results.every((r) => r.passed);
-      return {
-        passed,
-        reason: allReasons[0] ?? 'single_order_upgrade',
-        meta: allMeta,
-      };
+      return { passed, reason: allReasons[0] ?? 'single_order_upgrade', meta: allMeta };
     }
     const passed = results.some((r) => r.passed);
-    return {
-      passed,
-      reason: allReasons[0] ?? 'single_order_upgrade',
-      meta: allMeta,
-    };
+    return { passed, reason: allReasons[0] ?? 'single_order_upgrade', meta: allMeta };
   }
 
   private async evaluateCondition(
     userId: string,
     condition: UpgradeCondition,
     singleOrderAmount: number,
-  ): Promise<{
-    passed: boolean;
-    reason: TierChangeReason;
-    meta: Record<string, any>;
-  }> {
+  ): Promise<{ passed: boolean; reason: TierChangeReason; meta: Record<string, any> }> {
     switch (condition.type) {
       case 'single_order_amount': {
         const passed = singleOrderAmount >= (condition.minAmount ?? 0);
@@ -358,11 +309,7 @@ export class TierEvaluationService {
         return {
           passed,
           reason: 'cumulative_upgrade',
-          meta: {
-            cumulative,
-            threshold: condition.minAmount,
-            withinDays: condition.withinDays,
-          },
+          meta: { cumulative, threshold: condition.minAmount, withinDays: condition.withinDays },
         };
       }
 
@@ -380,11 +327,7 @@ export class TierEvaluationService {
         return {
           passed,
           reason: 'order_count_upgrade',
-          meta: {
-            count,
-            threshold: condition.minCount,
-            withinDays: condition.withinDays,
-          },
+          meta: { count, threshold: condition.minCount, withinDays: condition.withinDays },
         };
       }
 
@@ -422,19 +365,22 @@ export class TierEvaluationService {
     // Keep user_segments in sync so promotion engine can target by tier
     await this.syncSegment(userId, fromTier, config.tierName);
 
-    await this.writeHistory(
-      userId,
-      fromTier,
-      config.tierName,
-      reason,
-      upgradedBy,
-      orderId,
-      meta,
-    );
+    await this.writeHistory(userId, fromTier, config.tierName, reason, upgradedBy, orderId, meta);
 
-    this.logger.log(
-      `User ${userId}: ${fromTier} → ${config.tierName} (${reason})`,
-    );
+    // Send upgrade email — fire-and-forget
+    this.usersRepo.findOne({ where: { id: userId } }).then((user) => {
+      if (!user) return;
+      const expiresAt = new Date(Date.now() + config.membershipDurationDays * 86_400_000);
+      this.emailService.send(EmailType.TIER_UPGRADED, user.email, {
+        first_name: user.firstName ?? '',
+        tier_name:  config.displayName,
+        expires_at: expiresAt.toLocaleDateString('en-HK', { year: 'numeric', month: 'long', day: 'numeric' }),
+        store_name: 'My Store',
+        year:       String(new Date().getFullYear()),
+      }).catch((err) => this.logger.error(`Tier upgrade email failed: ${err.message}`));
+    }).catch(() => {});
+
+    this.logger.log(`User ${userId}: ${fromTier} → ${config.tierName} (${reason})`);
 
     return membership;
   }
@@ -458,15 +404,7 @@ export class TierEvaluationService {
     await this.membershipRepo.save(membership);
 
     await this.syncSegment(userId, fromTier, BASE_TIER);
-    await this.writeHistory(
-      userId,
-      fromTier,
-      BASE_TIER,
-      reason,
-      changedBy,
-      orderId,
-      meta,
-    );
+    await this.writeHistory(userId, fromTier, BASE_TIER, reason, changedBy, orderId, meta);
 
     return membership;
   }
@@ -521,9 +459,7 @@ export class TierEvaluationService {
     return config?.priority ?? BASE_PRIORITY;
   }
 
-  private async findNextLowerTier(
-    currentPriority: number,
-  ): Promise<TierConfig | null> {
+  private async findNextLowerTier(currentPriority: number): Promise<TierConfig | null> {
     return this.tierConfigRepo
       .createQueryBuilder('tc')
       .where('tc.isActive = true')

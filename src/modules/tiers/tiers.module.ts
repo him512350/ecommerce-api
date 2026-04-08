@@ -5,9 +5,11 @@ import { UserTierMembership } from './entities/user-tier-membership.entity';
 import { UserTierHistory } from './entities/user-tier-history.entity';
 import { UserSegment } from '../users/entities/user-segment.entity';
 import { Order } from '../orders/entities/order.entity';
+import { User } from '../users/entities/user.entity';
 import { TierConfigService } from './tier-config.service';
 import { TierEvaluationService } from './tier-evaluation.service';
 import { TiersController } from './tiers.controller';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -17,7 +19,9 @@ import { TiersController } from './tiers.controller';
       UserTierHistory,
       UserSegment,
       Order,
+      User,
     ]),
+    EmailModule,
   ],
   providers: [TierConfigService, TierEvaluationService],
   controllers: [TiersController],

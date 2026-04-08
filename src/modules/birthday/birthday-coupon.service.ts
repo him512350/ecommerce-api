@@ -6,7 +6,8 @@ import { BirthdayCouponConfig } from './entities/birthday-coupon-config.entity';
 import { BirthdayCouponLog } from './entities/birthday-coupon-log.entity';
 import { User } from '../users/entities/user.entity';
 import { PromotionsService } from '../promotions/promotions.service';
-import { MailService } from '../mail/mail.service';
+import { EmailService } from '../email/email.service';
+import { EmailType } from '../../common/enums';
 import { UpdateBirthdayCouponConfigDto } from './dto/birthday-coupon-config.dto';
 import {
   ActionTarget,
@@ -32,7 +33,7 @@ export class BirthdayCouponService {
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
     private readonly promotionsService: PromotionsService,
-    private readonly mailService: MailService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ── Admin: config CRUD ────────────────────────────────────────────────────
@@ -198,8 +199,24 @@ export class BirthdayCouponService {
       this.logger.error(`Failed to create birthday promotion for ${user.email}: ${err.message}`);
     }
 
-    // ── Send email ───────────────────────────────────────────────────────
-    await this.mailService.sendBirthdayCoupon(user, code, expiresAt, config);
+    // ── Send email via EmailService (uses DB template + SMTP config) ─────
+    const validUntil = expiresAt.toLocaleDateString('en-HK', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    });
+    const discount =
+      config.couponType === 'percentage'
+        ? `${Number(config.couponValue).toFixed(0)}% off`
+        : `HK$${Number(config.couponValue).toFixed(0)} off`;
+
+    await this.emailService.send(EmailType.BIRTHDAY_COUPON, user.email, {
+      first_name:     user.firstName ?? '',
+      coupon_code:    code,
+      discount,
+      valid_until:    validUntil,
+      custom_message: config.emailMessage ?? '',
+      store_name:     'My Store',
+      year:           String(new Date().getFullYear()),
+    });
 
     // ── Write log ────────────────────────────────────────────────────────
     // Upsert: if force=true and a row already exists, update it

@@ -144,3 +144,29 @@ export enum PointsTransactionType {
   ADJUSTED_DEDUCT = 'adjusted_deduct',
   REFUNDED = 'refunded',
 }
+
+// ── Email enums ───────────────────────────────────────────────────────────────
+
+export enum EmailType {
+  // Order — customer
+  ORDER_CONFIRMED = 'order_confirmed',
+  ORDER_PROCESSING = 'order_processing',
+  ORDER_SHIPPED = 'order_shipped',
+  ORDER_COMPLETED = 'order_completed',
+  ORDER_CANCELLED = 'order_cancelled',
+  ORDER_REFUNDED = 'order_refunded',
+  // Order — admin
+  ORDER_NEW_ADMIN = 'order_new_admin',
+  // Account
+  WELCOME = 'welcome',
+  TIER_UPGRADED = 'tier_upgraded',
+  POINTS_EARNED = 'points_earned',
+  // Loyalty
+  BIRTHDAY_COUPON = 'birthday_coupon',
+}
+
+export enum EmailRecipientType {
+  CUSTOMER = 'customer',
+  ADMIN = 'admin',
+  BOTH = 'both',
+}

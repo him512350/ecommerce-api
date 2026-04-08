@@ -8,6 +8,7 @@ import { CartModule } from '../cart/cart.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { ShippingModule } from '../shipping/shipping.module';
 import { PointsModule } from '../points/points.module';
+import { EmailModule } from '../email/email.module';
 import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
 
@@ -18,6 +19,7 @@ import { UsersModule } from '../users/users.module';
     PromotionsModule,
     ShippingModule,
     PointsModule,
+    EmailModule,
     MailModule,
     UsersModule,
   ],

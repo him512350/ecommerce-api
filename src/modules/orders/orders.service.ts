@@ -17,7 +17,8 @@ import { PointsService } from '../points/points.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
 import { OrderStatus, PaymentStatus } from '../../common/enums';
-import { MailService } from '../mail/mail.service';
+import { EmailService } from '../email/email.service';
+import { EmailType } from '../../common/enums';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -33,7 +34,7 @@ export class OrdersService {
     private readonly shippingCalculator: ShippingCalculatorService,
     private readonly pointsService: PointsService,
     private readonly dataSource: DataSource,
-    private readonly mailService: MailService,
+    private readonly emailService: EmailService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -163,7 +164,30 @@ export class OrdersService {
 
       if (fullOrder) {
         const user = await this.usersService.findOne(userId);
-        this.mailService.sendOrderConfirmation(fullOrder, user);
+        const itemsHtml = (fullOrder.items ?? [])
+          .map(i => `<tr>
+            <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0">${i.productName}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:center">${i.quantity}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right">HK$${Number(i.totalPrice).toFixed(2)}</td>
+          </tr>`).join('');
+        const orderItemsHtml = `<table style="width:100%;border-collapse:collapse;margin:20px 0">
+          <thead><tr>
+            <th style="text-align:left;padding:8px 12px;background:#f5f5f5;font-size:13px">Item</th>
+            <th style="text-align:center;padding:8px 12px;background:#f5f5f5;font-size:13px">Qty</th>
+            <th style="text-align:right;padding:8px 12px;background:#f5f5f5;font-size:13px">Price</th>
+          </tr></thead><tbody>${itemsHtml}</tbody></table>`;
+
+        this.emailService.send(EmailType.ORDER_CONFIRMED, user.email, {
+          first_name:       user.firstName ?? '',
+          order_number:     fullOrder.orderNumber,
+          order_total:      Number(fullOrder.total).toFixed(2),
+          subtotal:         Number(fullOrder.subtotal).toFixed(2),
+          shipping_cost:    Number(fullOrder.shippingCost).toFixed(2),
+          currency:         'HK$',
+          order_items_html: orderItemsHtml,
+          store_name:       'My Store',
+          year:             String(new Date().getFullYear()),
+        });
       }
 
       if (!fullOrder) throw new Error('Failed to retrieve created order');

@@ -30,6 +30,7 @@ import { SearchModule } from './modules/search/search.module';
 import { BirthdayModule } from './modules/birthday/birthday.module';
 import { PointsModule } from './modules/points/points.module';
 import { MailModule } from './modules/mail/mail.module';
+import { EmailModule } from './modules/email/email.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
 
@@ -99,6 +100,7 @@ import { HealthModule } from './modules/health/health.module';
     BirthdayModule,
     PointsModule,
     MailModule,
+    EmailModule,
     UploadModule,
     HealthModule,
   ],
