@@ -26,6 +26,7 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { TiersModule } from './modules/tiers/tiers.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
+import { SearchModule } from './modules/search/search.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
@@ -34,13 +35,7 @@ import { HealthModule } from './modules/health/health.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [
-        appConfig,
-        databaseConfig,
-        firebaseConfig,
-        mailConfig,
-        storageConfig,
-      ],
+      load: [appConfig, databaseConfig, firebaseConfig, mailConfig, storageConfig],
       envFilePath: '.env',
       cache: true,
     }),
@@ -78,8 +73,8 @@ import { HealthModule } from './modules/health/health.module';
     }),
 
     ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 },
-      { name: 'long', ttl: 60000, limit: 100 },
+      { name: 'short', ttl: 1000,  limit: 10  },
+      { name: 'long',  ttl: 60000, limit: 100 },
     ]),
 
     // Required for @Cron decorators in TierEvaluationService
@@ -98,6 +93,7 @@ import { HealthModule } from './modules/health/health.module';
     PromotionsModule,
     TiersModule,
     ShippingModule,
+    SearchModule,
     MailModule,
     UploadModule,
     HealthModule,
