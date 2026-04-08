@@ -57,7 +57,13 @@ export class User {
   @Column({ name: 'picture_url', nullable: true })
   pictureUrl: string;
 
-  @ApiProperty()
+  // Stored as DATE (no time) — used for birthday coupon automation.
+  // type:'date' prevents TypeORM inferring 'Object' from Date|null union.
+  @ApiProperty({ required: false, example: '1990-06-15' })
+  @Column({ name: 'birthday', type: 'date', nullable: true })
+  birthday: Date | null;
+
+  @ApiProperty({ required: false })
   @Column({ name: 'is_verified', default: false })
   isVerified: boolean;
 

@@ -46,6 +46,14 @@ export class CreateUserDto {
   @MaxLength(20)
   phone?: string;
 
+  @ApiPropertyOptional({
+    example: '1990-06-15',
+    description: 'ISO date string YYYY-MM-DD — used for birthday coupon automation',
+  })
+  @IsOptional()
+  @IsString()
+  birthday?: string;
+
   @ApiPropertyOptional({ enum: UserRole, default: UserRole.CUSTOMER })
   @IsOptional()
   @IsEnum(UserRole)

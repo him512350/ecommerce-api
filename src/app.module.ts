@@ -27,6 +27,7 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
 import { TiersModule } from './modules/tiers/tiers.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { SearchModule } from './modules/search/search.module';
+import { BirthdayModule } from './modules/birthday/birthday.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
@@ -94,6 +95,7 @@ import { HealthModule } from './modules/health/health.module';
     TiersModule,
     ShippingModule,
     SearchModule,
+    BirthdayModule,
     MailModule,
     UploadModule,
     HealthModule,
