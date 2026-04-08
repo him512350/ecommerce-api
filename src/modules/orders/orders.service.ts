@@ -12,6 +12,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CartService } from '../cart/cart.service';
 import { PromotionEngineService } from '../promotions/promotion-engine.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { ShippingCalculatorService } from '../shipping/shipping-calculator.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { paginate } from '../../common/utils/pagination.util';
 import { OrderStatus, PaymentStatus } from '../../common/enums';
@@ -28,6 +29,7 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly promotionEngine: PromotionEngineService,
     private readonly promotionsService: PromotionsService,
+    private readonly shippingCalculator: ShippingCalculatorService,
     private readonly dataSource: DataSource,
     private readonly mailService: MailService,
     private readonly usersService: UsersService,
@@ -44,40 +46,34 @@ export class OrdersService {
     const couponCode = dto.couponCode ?? cart.couponCode ?? undefined;
 
     // Run the full promotion engine to get authoritative pricing
-    const pricing = await this.promotionEngine.evaluate(
-      cart,
-      userId,
-      couponCode,
-    );
+    const pricing = await this.promotionEngine.evaluate(cart, userId, couponCode);
 
     return this.dataSource.transaction(async (manager) => {
       // Build order items from the engine's itemPricings
-      const orderItems: Partial<OrderItem>[] = pricing.itemPricings.map(
-        (ip) => {
-          const cartItem = cart.items.find((i) => i.id === ip.cartItemId)!;
-          return {
-            productId: ip.productId,
-            variantId: ip.variantId,
-            quantity: ip.quantity,
-            unitPrice: ip.unitPrice,
-            totalPrice: ip.finalTotal,
-            productName: ip.productName,
-            productSnapshot: {
-              sku: cartItem.product?.sku,
-              images: cartItem.product?.images?.map((i) => i.url),
-            },
-          };
-        },
-      );
+      const orderItems: Partial<OrderItem>[] = pricing.itemPricings.map((ip) => {
+        const cartItem = cart.items.find((i) => i.id === ip.cartItemId)!;
+        return {
+          productId:       ip.productId,
+          variantId:       ip.variantId,
+          quantity:        ip.quantity,
+          unitPrice:       ip.unitPrice,
+          totalPrice:      ip.finalTotal,
+          productName:     ip.productName,
+          productSnapshot: {
+            sku:    cartItem.product?.sku,
+            images: cartItem.product?.images?.map((i) => i.url),
+          },
+        };
+      });
 
       // Add free gift items (zero-priced lines)
       for (const gift of pricing.giftItems) {
         orderItems.push({
-          productId: gift.productId,
-          variantId: gift.variantId,
-          quantity: gift.quantity,
-          unitPrice: 0,
-          totalPrice: 0,
+          productId:   gift.productId,
+          variantId:   gift.variantId,
+          quantity:    gift.quantity,
+          unitPrice:   0,
+          totalPrice:  0,
           productName: `[Gift] ${gift.promotionName}`,
           productSnapshot: { isGift: true, promotionId: gift.promotionId },
         });
@@ -85,17 +81,37 @@ export class OrdersService {
 
       const orderNumber = `ORD-${Date.now()}`;
 
+      // Compute real shipping cost from the method stored on the cart
+      const itemCount = cart.items.reduce((s, i) => s + i.quantity, 0);
+      let realShippingCost = 0;
+      if (cart.selectedShippingMethodId) {
+        try {
+          const raw = await this.shippingCalculator.computeCost(
+            cart.selectedShippingMethodId,
+            pricing.subtotal - pricing.itemDiscountTotal,
+            itemCount,
+          );
+          const discount = Math.min(pricing.shippingDiscount, raw);
+          realShippingCost = +(raw - discount).toFixed(2);
+        } catch {
+          realShippingCost = 0;
+        }
+      }
+      const realTotal = +(
+        pricing.subtotal - pricing.itemDiscountTotal + realShippingCost + pricing.taxAmount
+      ).toFixed(2);
+
       const order = manager.create(Order, {
         userId,
         orderNumber,
-        subtotal: pricing.subtotal,
-        taxAmount: pricing.taxAmount,
-        shippingCost: pricing.shippingCost - pricing.shippingDiscount,
-        discountAmount: pricing.itemDiscountTotal + pricing.shippingDiscount,
-        total: pricing.total,
+        subtotal:        pricing.subtotal,
+        taxAmount:       pricing.taxAmount,
+        shippingCost:    realShippingCost,
+        discountAmount:  pricing.itemDiscountTotal,
+        total:           Math.max(0, realTotal),
         shippingAddressId: dto.shippingAddressId,
-        notes: dto.notes,
-        status: OrderStatus.PENDING,
+        notes:           dto.notes,
+        status:          OrderStatus.PENDING,
       });
 
       const savedOrder = await manager.save(order);
@@ -179,17 +195,11 @@ export class OrdersService {
     return this.ordersRepo.save(order);
   }
 
-  async updatePaymentStatus(
-    orderId: string,
-    status: PaymentStatus,
-  ): Promise<void> {
+  async updatePaymentStatus(orderId: string, status: PaymentStatus): Promise<void> {
     await this.ordersRepo.update(orderId, { paymentStatus: status });
   }
 
-  async updatePaymentIntentId(
-    orderId: string,
-    paymentIntentId: string,
-  ): Promise<void> {
+  async updatePaymentIntentId(orderId: string, paymentIntentId: string): Promise<void> {
     await this.ordersRepo.update(orderId, { paymentIntentId });
   }
 }

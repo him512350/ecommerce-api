@@ -37,8 +37,6 @@ interface EvalContext {
 }
 
 const TAX_RATE = 0.0; // HK has no GST — set > 0 if needed
-const FREE_SHIPPING_THRESHOLD = 300; // HKD
-const BASE_SHIPPING = 30; // HKD flat rate
 
 @Injectable()
 export class PromotionEngineService {
@@ -473,10 +471,10 @@ export class PromotionEngineService {
   }
 
   // free_shipping ────────────────────────────────────────────────────────────
-  private applyFreeShipping(ctx: EvalContext) {
-    const baseShipping =
-      ctx.subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : BASE_SHIPPING;
-    return { shippingDiscount: baseShipping };
+  private applyFreeShipping(_ctx: EvalContext) {
+    // Return a large sentinel so CartService's Math.min(discount, actualCost)
+    // always zeroes out whatever shipping method the customer has selected.
+    return { shippingDiscount: 999_999 };
   }
 
   // bogo ─────────────────────────────────────────────────────────────────────
@@ -704,28 +702,23 @@ export class PromotionEngineService {
     const itemDiscountTotal = +itemPricings
       .reduce((s, i) => s + i.discountAmount, 0)
       .toFixed(2);
-    const baseShipping =
-      subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : BASE_SHIPPING;
-    const actualShippingDiscount = Math.min(shippingDiscount, baseShipping);
-    const netShipping = baseShipping - actualShippingDiscount;
     const taxAmount = +((subtotal - itemDiscountTotal) * TAX_RATE).toFixed(2);
-    const total = +(
-      subtotal -
-      itemDiscountTotal +
-      netShipping +
-      taxAmount
-    ).toFixed(2);
 
+    // Shipping cost and final total are computed by CartService using the
+    // real ShippingCalculatorService. The engine only signals whether a
+    // free_shipping promotion is active via shippingDiscount.
     return {
       itemPricings,
       giftItems,
       subtotal: +subtotal.toFixed(2),
       itemDiscountTotal,
-      shippingCost: baseShipping,
-      shippingDiscount: actualShippingDiscount,
+      availableShipping: [], // filled in by CartService
+      shippingCost: 0, // overridden by CartService
+      shippingDiscount: Math.min(shippingDiscount, 999_999),
       taxAmount,
-      total: Math.max(0, total),
+      total: +(subtotal - itemDiscountTotal + taxAmount).toFixed(2),
       appliedPromotions,
+      selectedShippingMethodId: null, // overridden by CartService
     };
   }
 

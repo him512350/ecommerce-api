@@ -6,10 +6,10 @@ export interface ItemPricing {
   variantId?: string;
   productName: string;
   quantity: number;
-  unitPrice: number; // original unit price snapshot
-  lineTotal: number; // quantity * unitPrice (before discount)
-  discountAmount: number; // total discount applied to this line
-  finalTotal: number; // lineTotal - discountAmount
+  unitPrice: number;
+  lineTotal: number;
+  discountAmount: number;
+  finalTotal: number;
 }
 
 export interface GiftItem {
@@ -28,14 +28,30 @@ export interface AppliedPromotion {
   actionType: ActionType;
 }
 
+// Returned by ShippingCalculatorService
+export interface ShippingOption {
+  methodId: string;
+  methodName: string;
+  description: string | null;
+  estimatedDays: string | null;
+  cost: number;
+  isFree: boolean;
+  zoneId: string;
+  zoneName: string;
+}
+
 export interface CartPricingResult {
   itemPricings: ItemPricing[];
   giftItems: GiftItem[];
-  subtotal: number; // sum of all lineTotals (before discounts)
-  itemDiscountTotal: number; // sum of all line discounts
-  shippingCost: number; // base shipping before discount
-  shippingDiscount: number; // shipping discount from free_shipping actions
+  subtotal: number;
+  itemDiscountTotal: number;
+  // Available shipping options for the cart's country (or empty if no address set)
+  availableShipping: ShippingOption[];
+  // Cost of the currently selected shipping method (0 if none selected)
+  shippingCost: number;
+  shippingDiscount: number; // from free_shipping promotion action
   taxAmount: number;
-  total: number; // subtotal - itemDiscountTotal - shippingDiscount + (shippingCost - shippingDiscount) + taxAmount
+  total: number;
   appliedPromotions: AppliedPromotion[];
+  selectedShippingMethodId: string | null;
 }

@@ -13,6 +13,7 @@ import { ProductsService } from '../products/products.service';
 import { PromotionEngineService } from '../promotions/promotion-engine.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { BundleService } from '../products/bundle.service';
+import { ShippingCalculatorService } from '../shipping/shipping-calculator.service';
 import { CartPricingResult } from '../promotions/interfaces/cart-pricing.interface';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class CartService {
     private readonly promotionEngine: PromotionEngineService,
     private readonly promotionsService: PromotionsService,
     private readonly bundleService: BundleService,
+    private readonly shippingCalculator: ShippingCalculatorService,
   ) {}
 
   // ── Cart retrieval ────────────────────────────────────────────────────────
@@ -33,12 +35,7 @@ export class CartService {
   async getOrCreateCart(userId: string): Promise<Cart> {
     let cart = await this.cartRepo.findOne({
       where: { userId },
-      relations: [
-        'items',
-        'items.product',
-        'items.product.category',
-        'items.variant',
-      ],
+      relations: ['items', 'items.product', 'items.product.category', 'items.variant'],
     });
     if (!cart) {
       cart = await this.cartRepo.save(this.cartRepo.create({ userId }));
@@ -47,115 +44,157 @@ export class CartService {
   }
 
   /**
-   * Returns the cart together with a full pricing breakdown
-   * computed by the promotion engine (discounts, gifts, totals).
+   * Returns cart + full pricing breakdown including available shipping options.
+   * countryCode is used to look up shipping options (pass from frontend or
+   * from the user's default address).
    */
   async getCartWithPricing(
     userId: string,
+    countryCode = 'HK',
   ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
     const cart = await this.getOrCreateCart(userId);
-    const pricing = await this.promotionEngine.evaluate(
+
+    // Get promotion-based pricing (discounts, gifts)
+    const promoResult = await this.promotionEngine.evaluate(
       cart,
       userId,
       cart.couponCode ?? undefined,
     );
+
+    // Get available shipping options for the country
+    const itemCount = (cart.items ?? []).reduce((s, i) => s + i.quantity, 0);
+    const availableShipping = await this.shippingCalculator.getOptions(
+      countryCode,
+      promoResult.subtotal - promoResult.itemDiscountTotal,
+      itemCount,
+    );
+
+    // Compute actual shipping cost from selected method (if any)
+    let shippingCost = 0;
+    if (cart.selectedShippingMethodId) {
+      const selected = availableShipping.find(
+        (s) => s.methodId === cart.selectedShippingMethodId,
+      );
+      shippingCost = selected ? selected.cost : 0;
+    }
+
+    // Apply any free_shipping promotion on top
+    const shippingDiscount = Math.min(promoResult.shippingDiscount, shippingCost);
+    const netShipping = shippingCost - shippingDiscount;
+
+    const total = +(
+      promoResult.subtotal -
+      promoResult.itemDiscountTotal +
+      netShipping +
+      promoResult.taxAmount
+    ).toFixed(2);
+
+    const pricing: CartPricingResult = {
+      ...promoResult,
+      availableShipping,
+      shippingCost: netShipping,
+      shippingDiscount,
+      total: Math.max(0, total),
+      selectedShippingMethodId: cart.selectedShippingMethodId,
+    };
+
     return { cart, pricing };
+  }
+
+  // ── Shipping method selection ──────────────────────────────────────────────
+
+  async setShippingMethod(
+    userId: string,
+    methodId: string,
+    countryCode = 'HK',
+  ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
+    const cart = await this.getOrCreateCart(userId);
+    const itemCount = (cart.items ?? []).reduce((s, i) => s + i.quantity, 0);
+
+    // Validate the method is available for this cart
+    const options = await this.shippingCalculator.getOptions(
+      countryCode,
+      cart.subtotal,
+      itemCount,
+    );
+    const valid = options.find((o) => o.methodId === methodId);
+    if (!valid) {
+      throw new BadRequestException('Shipping method not available for this cart');
+    }
+
+    await this.cartRepo.update(cart.id, { selectedShippingMethodId: methodId });
+    return this.getCartWithPricing(userId, countryCode);
+  }
+
+  async clearShippingMethod(userId: string): Promise<void> {
+    const cart = await this.getOrCreateCart(userId);
+    await this.cartRepo.update(cart.id, { selectedShippingMethodId: null });
   }
 
   // ── Item management ───────────────────────────────────────────────────────
 
   async addItem(userId: string, dto: AddCartItemDto): Promise<Cart> {
-    const cart = await this.getOrCreateCart(userId);
+    const cart    = await this.getOrCreateCart(userId);
     const product = await this.productsService.findOne(dto.productId);
-    const qty = dto.quantity ?? 1;
+    const qty     = dto.quantity ?? 1;
 
-    if (!product.isActive)
-      throw new BadRequestException('Product is not available');
+    if (!product.isActive) throw new BadRequestException('Product is not available');
 
-    // ── Bundle product ────────────────────────────────────────────────────
     if (product.productType === 'bundle') {
       if (!dto.bundleSelections?.length) {
-        // Auto-resolve default selections for fixed bundles
-        const defaults = await this.bundleService.getDefaultSelections(
-          product.id,
-        );
+        const defaults = await this.bundleService.getDefaultSelections(product.id);
         dto.bundleSelections = defaults as any;
       }
-
-      const { unitPrice, selections } =
-        await this.bundleService.validateAndPrice(
-          product,
-          dto.bundleSelections as any,
-        );
-
-      // Bundles are always added as a new line (no merging — selections may differ)
+      const { unitPrice, selections } = await this.bundleService.validateAndPrice(
+        product,
+        dto.bundleSelections as any,
+      );
       await this.cartItemRepo.save(
         this.cartItemRepo.create({
-          cartId: cart.id,
-          productId: product.id,
-          variantId: null,
-          quantity: qty,
-          unitPrice,
-          bundleSelections: selections,
+          cartId: cart.id, productId: product.id,
+          variantId: null, quantity: qty,
+          unitPrice, bundleSelections: selections,
         }),
       );
-
       return this.getOrCreateCart(userId);
     }
 
-    // ── Simple / variable product ─────────────────────────────────────────
     let unitPrice = Number(product.basePrice);
-
     if (dto.variantId) {
       const variant = product.variants?.find((v) => v.id === dto.variantId);
       if (!variant) throw new NotFoundException('Variant not found');
-      if (variant.inventoryQuantity < qty) {
-        throw new BadRequestException('Insufficient stock');
-      }
+      if (variant.inventoryQuantity < qty) throw new BadRequestException('Insufficient stock');
       unitPrice = Number(variant.price);
     }
 
     const existingItem = cart.items?.find(
-      (i) =>
-        i.productId === dto.productId &&
-        i.variantId === (dto.variantId ?? null),
+      (i) => i.productId === dto.productId && i.variantId === (dto.variantId ?? null),
     );
-
     if (existingItem) {
       existingItem.quantity += qty;
       await this.cartItemRepo.save(existingItem);
     } else {
       await this.cartItemRepo.save(
         this.cartItemRepo.create({
-          cartId: cart.id,
-          productId: dto.productId,
-          variantId: dto.variantId ?? null,
-          quantity: qty,
-          unitPrice,
-          bundleSelections: null,
+          cartId: cart.id, productId: dto.productId,
+          variantId: dto.variantId ?? null, quantity: qty,
+          unitPrice, bundleSelections: null,
         }),
       );
     }
-
     return this.getOrCreateCart(userId);
   }
 
-  async updateItem(
-    userId: string,
-    itemId: string,
-    dto: UpdateCartItemDto,
-  ): Promise<Cart> {
+  async updateItem(userId: string, itemId: string, dto: UpdateCartItemDto): Promise<Cart> {
     const cart = await this.getOrCreateCart(userId);
     const item = cart.items?.find((i) => i.id === itemId);
     if (!item) throw new NotFoundException('Cart item not found');
-
     if (dto.quantity === 0) {
       await this.cartItemRepo.remove(item);
     } else {
       item.quantity = dto.quantity;
       await this.cartItemRepo.save(item);
     }
-
     return this.getOrCreateCart(userId);
   }
 
@@ -166,26 +205,22 @@ export class CartService {
   async clearCart(userId: string): Promise<void> {
     const cart = await this.getOrCreateCart(userId);
     await this.cartItemRepo.delete({ cartId: cart.id });
-    // Also clear any applied coupon
-    await this.cartRepo.update(cart.id, { couponCode: null, couponId: null });
+    await this.cartRepo.update(cart.id, {
+      couponCode: null,
+      couponId: null,
+      selectedShippingMethodId: null,
+    });
   }
 
   // ── Coupon management ─────────────────────────────────────────────────────
 
-  /**
-   * Validates the coupon exists and is active, then stores it on the cart.
-   * Full condition / usage-limit checks happen during pricing evaluation.
-   */
   async applyCoupon(
     userId: string,
     code: string,
   ): Promise<{ cart: Cart; pricing: CartPricingResult }> {
-    // Validate coupon exists and is globally active
     await this.promotionsService.findOneCoupon(code);
-
     const cart = await this.getOrCreateCart(userId);
     await this.cartRepo.update(cart.id, { couponCode: code.toUpperCase() });
-
     return this.getCartWithPricing(userId);
   }
 

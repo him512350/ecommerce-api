@@ -29,12 +29,16 @@ export class Cart {
   @Column({ name: 'expires_at', nullable: true })
   expiresAt: Date;
 
-  // explicit type: 'varchar' prevents TypeORM inferring 'Object' from string | null
+  // explicit type:'varchar' prevents TypeORM inferring 'Object' from string|null
   @Column({ name: 'coupon_code', type: 'varchar', nullable: true, length: 60 })
   couponCode: string | null;
 
   @Column({ name: 'coupon_id', type: 'uuid', nullable: true })
   couponId: string | null;
+
+  // Shipping method selected by the customer at cart stage
+  @Column({ name: 'selected_shipping_method_id', type: 'uuid', nullable: true })
+  selectedShippingMethodId: string | null;
 
   @OneToMany(() => CartItem, (item) => item.cart, {
     cascade: true,

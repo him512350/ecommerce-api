@@ -116,3 +116,20 @@ export enum BundlePricingType {
   CALCULATED = 'calculated', // sum of selected items + price_modifiers
   DISCOUNTED = 'discounted', // sum of selected items minus discount_percent
 }
+
+// ── Shipping enums ────────────────────────────────────────────────────────────
+
+export enum ShippingRateCondition {
+  ALWAYS = 'always', // always applies — use as the fallback
+  ORDER_MIN = 'order_min', // cart total >= condition_min
+  ORDER_MAX = 'order_max', // cart total <  condition_max
+  ORDER_BETWEEN = 'order_between', // condition_min <= cart total < condition_max
+  ITEM_COUNT_MIN = 'item_count_min', // total item count >= condition_min
+}
+
+export enum ShippingRateType {
+  FIXED = 'fixed', // flat HKD amount
+  FREE = 'free', // zero cost (clearer for admin than fixed=0)
+  PER_ITEM = 'per_item', // cost × number of line items
+  PERCENTAGE = 'percentage', // percentage of cart subtotal
+}

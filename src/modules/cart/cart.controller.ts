@@ -7,13 +7,15 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { ApplyCouponDto } from '../promotions/dto/apply-coupon.dto';
+import { SelectShippingMethodDto } from '../shipping/dto/shipping.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -25,9 +27,13 @@ export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get cart with full promotion pricing breakdown' })
-  getCart(@CurrentUser('id') userId: string) {
-    return this.cartService.getCartWithPricing(userId);
+  @ApiOperation({ summary: 'Get cart with pricing, discounts, and available shipping options' })
+  @ApiQuery({ name: 'country', required: false, example: 'HK', description: 'ISO country code for shipping options' })
+  getCart(
+    @CurrentUser('id') userId: string,
+    @Query('country') country = 'HK',
+  ) {
+    return this.cartService.getCartWithPricing(userId, country.toUpperCase());
   }
 
   @Post('items')
@@ -56,7 +62,7 @@ export class CartController {
   }
 
   @Delete()
-  @ApiOperation({ summary: 'Clear entire cart and remove any coupon' })
+  @ApiOperation({ summary: 'Clear entire cart, coupon, and shipping selection' })
   clearCart(@CurrentUser('id') userId: string) {
     return this.cartService.clearCart(userId);
   }
@@ -70,10 +76,27 @@ export class CartController {
   }
 
   @Delete('coupon')
-  @ApiOperation({
-    summary: 'Remove the applied coupon — returns updated pricing',
-  })
+  @ApiOperation({ summary: 'Remove the applied coupon — returns updated pricing' })
   removeCoupon(@CurrentUser('id') userId: string) {
     return this.cartService.removeCoupon(userId);
+  }
+
+  // ── Shipping method endpoints ─────────────────────────────────────────────
+
+  @Post('shipping')
+  @ApiOperation({ summary: 'Select a shipping method for this cart' })
+  @ApiQuery({ name: 'country', required: false, example: 'HK' })
+  setShipping(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SelectShippingMethodDto,
+    @Query('country') country = 'HK',
+  ) {
+    return this.cartService.setShippingMethod(userId, dto.methodId, country.toUpperCase());
+  }
+
+  @Delete('shipping')
+  @ApiOperation({ summary: 'Clear the selected shipping method' })
+  clearShipping(@CurrentUser('id') userId: string) {
+    return this.cartService.clearShippingMethod(userId);
   }
 }

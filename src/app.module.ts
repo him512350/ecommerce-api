@@ -25,6 +25,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { TiersModule } from './modules/tiers/tiers.module';
+import { ShippingModule } from './modules/shipping/shipping.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { HealthModule } from './modules/health/health.module';
@@ -96,6 +97,7 @@ import { HealthModule } from './modules/health/health.module';
     CouponsModule,
     PromotionsModule,
     TiersModule,
+    ShippingModule,
     MailModule,
     UploadModule,
     HealthModule,
