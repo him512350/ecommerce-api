@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { ActionType, ActionTarget } from '../../../common/enums';
 import { Promotion } from './promotion.entity';
 
@@ -11,6 +11,7 @@ export class PromotionAction {
   promotionId: string;
 
   @ManyToOne(() => Promotion, (p) => p.actions, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'promotion_id' })
   promotion: Promotion;
 
   @Column({ type: 'enum', enum: ActionType })

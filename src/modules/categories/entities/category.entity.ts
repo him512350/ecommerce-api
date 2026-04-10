@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -29,6 +30,7 @@ export class Category {
   parentId: string;
 
   @ManyToOne(() => Category, (cat) => cat.children, { nullable: true })
+  @JoinColumn({ name: 'parent_id' })
   parent: Category;
 
   @OneToMany(() => Category, (cat) => cat.parent)

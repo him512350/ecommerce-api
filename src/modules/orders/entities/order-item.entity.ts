@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -18,18 +19,21 @@ export class OrderItem {
   orderId: string;
 
   @ManyToOne(() => Order, (order) => order.items, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'order_id' })
   order: Order;
 
   @Column({ name: 'product_id' })
   productId: string;
 
   @ManyToOne(() => Product, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   @Column({ name: 'variant_id', nullable: true })
   variantId: string;
 
   @ManyToOne(() => ProductVariant, { nullable: true })
+  @JoinColumn({ name: 'variant_id' })
   variant: ProductVariant;
 
   @Column({ default: 1 })

@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -16,6 +17,7 @@ export class ProductImage {
   productId: string;
 
   @ManyToOne(() => Product, (p) => p.images, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   @Column()

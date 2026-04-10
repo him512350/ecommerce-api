@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -19,6 +20,7 @@ export class ShippingMethod {
   zoneId: string;
 
   @ManyToOne(() => ShippingZone, (z) => z.methods, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'zone_id' })
   zone: ShippingZone;
 
   // Shown on checkout page e.g. "Standard Delivery", "Express (Next Day)"

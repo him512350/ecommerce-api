@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { BundleGroup } from './bundle-group.entity';
 import { Product } from './product.entity';
 import { ProductVariant } from './product-variant.entity';
@@ -12,12 +12,14 @@ export class BundleGroupItem {
   groupId: string;
 
   @ManyToOne(() => BundleGroup, (g) => g.items, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'group_id' })
   group: BundleGroup;
 
   @Column({ name: 'product_id' })
   productId: string;
 
   @ManyToOne(() => Product, { eager: true })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   // If set, only this specific variant is included / selectable
@@ -25,6 +27,7 @@ export class BundleGroupItem {
   variantId: string | null;
 
   @ManyToOne(() => ProductVariant, { nullable: true, eager: true })
+  @JoinColumn({ name: 'variant_id' })
   variant: ProductVariant;
 
   // How many units of this item are included when selected

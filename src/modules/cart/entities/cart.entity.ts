@@ -1,6 +1,6 @@
 import {
   Column, CreateDateColumn, Entity, Index,
-  ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn,
+  JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { CartItem } from './cart-item.entity';
@@ -15,6 +15,7 @@ export class Cart {
   userId: string;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ name: 'session_id', nullable: true, length: 100 })

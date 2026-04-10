@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -18,6 +19,7 @@ export class ProductVariant {
   productId: string;
 
   @ManyToOne(() => Product, (p) => p.variants, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   @Column({ length: 200 })

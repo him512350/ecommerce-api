@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   Entity,
   Index,
@@ -19,12 +20,14 @@ export class Inventory {
   productId: string;
 
   @ManyToOne(() => Product, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   @Column({ name: 'variant_id', nullable: true })
   variantId: string;
 
   @ManyToOne(() => ProductVariant, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'variant_id' })
   variant: ProductVariant;
 
   @Column({ default: 0 })

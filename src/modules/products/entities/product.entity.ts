@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   DeleteDateColumn,
@@ -53,6 +54,7 @@ export class Product {
   categoryId: string;
 
   @ManyToOne(() => Category, (cat) => cat.products, { nullable: true })
+  @JoinColumn({ name: 'category_id' })
   category: Category;
 
   // 'simple' (default) | 'variable' | 'bundle'

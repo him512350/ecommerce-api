@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   Unique,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { Product } from '../../products/entities/product.entity';
 import { User } from '../../users/entities/user.entity';
@@ -22,12 +23,14 @@ export class Review {
   productId: string;
 
   @ManyToOne(() => Product, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   @Column({ name: 'user_id' })
   userId: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ type: 'smallint' })

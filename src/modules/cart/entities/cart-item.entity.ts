@@ -6,6 +6,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { Cart } from './cart.entity';
 import { Product } from '../../products/entities/product.entity';
@@ -38,18 +39,21 @@ export class CartItem {
   cartId: string;
 
   @ManyToOne(() => Cart, (cart) => cart.items, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'cart_id' })
   cart: Cart;
 
   @Column({ name: 'product_id' })
   productId: string;
 
   @ManyToOne(() => Product, { eager: true })
+  @JoinColumn({ name: 'product_id' })
   product: Product;
 
   @Column({ name: 'variant_id', type: 'uuid', nullable: true })
   variantId: string | null;
 
   @ManyToOne(() => ProductVariant, { eager: true, nullable: true })
+  @JoinColumn({ name: 'variant_id' })
   variant: ProductVariant;
 
   @Column({ default: 1 })

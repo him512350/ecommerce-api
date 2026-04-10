@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { ShippingRateCondition, ShippingRateType } from '../../../common/enums';
 import { ShippingMethod } from './shipping-method.entity';
 
@@ -11,6 +11,7 @@ export class ShippingRate {
   methodId: string;
 
   @ManyToOne(() => ShippingMethod, (m) => m.rates, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'method_id' })
   method: ShippingMethod;
 
   // When this rule fires

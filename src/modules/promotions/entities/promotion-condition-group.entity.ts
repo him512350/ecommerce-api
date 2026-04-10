@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   Entity,
   ManyToOne,
@@ -18,6 +19,7 @@ export class PromotionConditionGroup {
   promotionId: string;
 
   @ManyToOne(() => Promotion, (p) => p.conditionGroups, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'promotion_id' })
   promotion: Promotion;
 
   // How conditions inside this group combine with each other

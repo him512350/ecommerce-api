@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -19,6 +20,7 @@ export class UserSegment {
   userId: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ length: 80 })

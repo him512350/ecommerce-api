@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { ConditionType, ComparisonOperator } from '../../../common/enums';
 import { PromotionConditionGroup } from './promotion-condition-group.entity';
 
@@ -13,6 +13,7 @@ export class PromotionCondition {
   @ManyToOne(() => PromotionConditionGroup, (g) => g.conditions, {
     onDelete: 'CASCADE',
   })
+  @JoinColumn({ name: 'group_id' })
   group: PromotionConditionGroup;
 
   @Column({ type: 'enum', enum: ConditionType })

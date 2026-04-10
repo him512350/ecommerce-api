@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -18,6 +19,7 @@ export class PromotionUsageLog {
   promotionId: string;
 
   @ManyToOne(() => Promotion, (p) => p.usageLogs, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'promotion_id' })
   promotion: Promotion;
 
   @Column({ name: 'user_id' })

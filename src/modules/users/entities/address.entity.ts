@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -7,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+
 import { User } from './user.entity';
 
 @Entity('user_addresses')
@@ -19,6 +21,7 @@ export class Address {
   userId: string;
 
   @ManyToOne(() => User, (user) => user.addresses, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ length: 50, nullable: true })

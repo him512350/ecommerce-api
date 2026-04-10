@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -21,6 +22,7 @@ export class UserTierMembership {
   userId: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   // "customer" | "vip" | "special_vip" — mirrors TierConfig.tierName.
@@ -33,6 +35,7 @@ export class UserTierMembership {
   tierConfigId: string | null;
 
   @ManyToOne(() => TierConfig, { nullable: true, eager: true })
+  @JoinColumn({ name: 'tier_config_id' })
   tierConfig: TierConfig;
 
   @Column({ name: 'started_at', type: 'timestamptz' })

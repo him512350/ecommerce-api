@@ -8,6 +8,7 @@ import {
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Address } from '../../users/entities/address.entity';
@@ -30,6 +31,7 @@ export class Order {
   userId: string;
 
   @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.PENDING })
@@ -80,12 +82,14 @@ export class Order {
   shippingAddressId: string;
 
   @ManyToOne(() => Address, { nullable: true })
+  @JoinColumn({ name: 'shipping_address_id' })
   shippingAddress: Address;
 
   @Column({ name: 'coupon_id', nullable: true })
   couponId: string;
 
   @ManyToOne(() => Coupon, { nullable: true })
+  @JoinColumn({ name: 'coupon_id' })
   coupon: Coupon;
 
   @Column({ name: 'payment_intent_id', nullable: true, length: 100 })

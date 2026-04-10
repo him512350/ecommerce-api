@@ -1,4 +1,5 @@
 import {
+  JoinColumn,
   Column,
   CreateDateColumn,
   Entity,
@@ -19,6 +20,7 @@ export class BundleGroup {
   bundleConfigId: string;
 
   @ManyToOne(() => BundleConfig, (bc) => bc.groups, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bundle_config_id' })
   bundleConfig: BundleConfig;
 
   // e.g. "Choose your main item", "Pick your sides", "Optional add-ons"
